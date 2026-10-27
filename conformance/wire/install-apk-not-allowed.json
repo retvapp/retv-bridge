@@ -1,0 +1,58 @@
+{
+  "description": "installApk only downloads from https://retv.app/downloads/ and https://ru.retv.app/downloads/ (isAllowedApkUrl): another scheme or host, .., a query, a fragment or a name that is not *.apk is url-not-allowed before anything is fetched, as is a missing url.",
+  "adb": {
+    "devices": {
+      "192.168.1.5:5555": {
+        "model": "MiTV-AYFR0"
+      }
+    },
+    "http": {
+      "http://retv.app/downloads/x.apk": {
+        "status": 200,
+        "bodyHex": "504b030401020304"
+      },
+      "https://evil.example/downloads/x.apk": {
+        "status": 200,
+        "bodyHex": "504b030401020304"
+      },
+      "https://retv.app.evil.example/downloads/x.apk": {
+        "status": 200,
+        "bodyHex": "504b030401020304"
+      },
+      "https://retv.app/downloads/../x.apk": {
+        "status": 200,
+        "bodyHex": "504b030401020304"
+      },
+      "https://retv.app/downloads/x.apk?a=1": {
+        "status": 200,
+        "bodyHex": "504b030401020304"
+      },
+      "https://retv.app/downloads/x.apk#y": {
+        "status": 200,
+        "bodyHex": "504b030401020304"
+      },
+      "https://retv.app/other/x.apk": {
+        "status": 200,
+        "bodyHex": "504b030401020304"
+      },
+      "https://retv.app/downloads/x.zip": {
+        "status": 200,
+        "bodyHex": "504b030401020304"
+      }
+    }
+  },
+  "steps": [
+    {"open":{"origin":"https://retv.app","host":"$host"},"expectStatus":101},
+    {"send":{"id":1,"token":"$token","type":"connect","ip":"192.168.1.5","port":5555},"expect":{"id":1,"ok":true,"result":{"serial":"192.168.1.5:5555","model":"MiTV-AYFR0"}}},
+    {"send":{"id":2,"token":"$token","type":"installApk","serial":"192.168.1.5:5555","url":"http://retv.app/downloads/x.apk","sha256":"5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea"},"expect":{"id":2,"ok":false,"error":"url-not-allowed"}},
+    {"send":{"id":3,"token":"$token","type":"installApk","serial":"192.168.1.5:5555","url":"https://evil.example/downloads/x.apk","sha256":"5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea"},"expect":{"id":3,"ok":false,"error":"url-not-allowed"}},
+    {"send":{"id":4,"token":"$token","type":"installApk","serial":"192.168.1.5:5555","url":"https://retv.app.evil.example/downloads/x.apk","sha256":"5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea"},"expect":{"id":4,"ok":false,"error":"url-not-allowed"}},
+    {"send":{"id":5,"token":"$token","type":"installApk","serial":"192.168.1.5:5555","url":"https://retv.app/downloads/../x.apk","sha256":"5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea"},"expect":{"id":5,"ok":false,"error":"url-not-allowed"}},
+    {"send":{"id":6,"token":"$token","type":"installApk","serial":"192.168.1.5:5555","url":"https://retv.app/downloads/x.apk?a=1","sha256":"5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea"},"expect":{"id":6,"ok":false,"error":"url-not-allowed"}},
+    {"send":{"id":7,"token":"$token","type":"installApk","serial":"192.168.1.5:5555","url":"https://retv.app/downloads/x.apk#y","sha256":"5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea"},"expect":{"id":7,"ok":false,"error":"url-not-allowed"}},
+    {"send":{"id":8,"token":"$token","type":"installApk","serial":"192.168.1.5:5555","url":"https://retv.app/other/x.apk","sha256":"5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea"},"expect":{"id":8,"ok":false,"error":"url-not-allowed"}},
+    {"send":{"id":9,"token":"$token","type":"installApk","serial":"192.168.1.5:5555","url":"https://retv.app/downloads/x.zip","sha256":"5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea"},"expect":{"id":9,"ok":false,"error":"url-not-allowed"}},
+    {"send":{"id":20,"token":"$token","type":"installApk","serial":"192.168.1.5:5555","sha256":"5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea"},"expect":{"id":20,"ok":false,"error":"url-not-allowed"}},
+    {"expectAdb":{"pushed":{},"ran":[]}}
+  ]
+}

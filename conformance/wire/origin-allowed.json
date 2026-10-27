@@ -1,0 +1,13 @@
+{
+  "description": "Every allowed Origin opens a socket, with Host 127.0.0.1:<port> or localhost:<port>.",
+  "steps": [
+    {"open": {"origin": "http://127.0.0.1:5180", "host": "$host"}, "expectStatus": 101},
+    {"send": {"id": 1, "token": "$token", "type": "hello", "version": 1}, "expect": {"id": 1, "ok": true, "result": {"version": "$any", "protocol": 2, "features": ["installApk"], "adb": true, "paired": true}}},
+    {"socket": 1, "open": {"origin": "http://localhost:5180", "host": "localhost:$port"}, "expectStatus": 101},
+    {"socket": 1, "send": {"id": 1, "token": "$token", "type": "hello"}, "expect": {"id": 1, "ok": true, "result": {"version": "$any", "protocol": 2, "features": ["installApk"], "adb": true, "paired": true}}},
+    {"socket": 2, "open": {"origin": "http://127.0.0.1:4189", "host": "$host"}, "expectStatus": 101},
+    {"socket": 3, "open": {"origin": "https://retv.app", "host": "$host"}, "expectStatus": 101},
+    {"socket": 4, "open": {"origin": "https://ru.retv.app", "host": "$host"}, "expectStatus": 101},
+    {"socket": 4, "send": {"id": 7, "token": "$token", "type": "hello"}, "expect": {"id": 7, "ok": true, "result": {"version": "$any", "protocol": 2, "features": ["installApk"], "adb": true, "paired": true}}}
+  ]
+}

@@ -1,0 +1,17 @@
+[package]
+name = "retv-bridge-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "retv-bridge-cli"
+path = "src/main.rs"
+
+[dependencies]
+retv-bridge-core = { workspace = true }
+retv-bridge-adb = { workspace = true }
+retv-bridge-mdns = { workspace = true }
+rand = { workspace = true }
+tokio = { workspace = true }

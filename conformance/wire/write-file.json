@@ -1,0 +1,24 @@
+{
+  "description": "writeFile writes UTF-8 text only strictly below /sdcard/ReTV/ (normalised, no '..', no trailing slash); everything else is path-not-allowed.",
+  "adb": {"devices": {"192.168.1.5:5555": {"model": "MiTV-AYFR0"}}},
+  "steps": [
+    {"open": {"origin": "http://127.0.0.1:5180", "host": "$host"}, "expectStatus": 101},
+    {"send": {"id": 1, "token": "$token", "type": "connect", "ip": "192.168.1.5", "port": 5555}, "expect": {"id": 1, "ok": true, "result": {"serial": "192.168.1.5:5555", "model": "MiTV-AYFR0"}}},
+    {"send": {"id": 2, "token": "$token", "type": "writeFile", "serial": "192.168.1.5:5555", "path": "/sdcard/ReTV/snap.json", "data": "{}"}, "expect": {"id": 2, "ok": true, "result": {}}},
+    {"send": {"id": 3, "token": "$token", "type": "writeFile", "serial": "192.168.1.5:5555", "path": "/sdcard/ReTV/a/b.txt", "data": "Привет\n"}, "expect": {"id": 3, "ok": true, "result": {}}},
+    {"send": {"id": 4, "token": "$token", "type": "writeFile", "serial": "192.168.1.5:5555", "path": "/sdcard/ReTV/../x", "data": "{}"}, "expect": {"id": 4, "ok": false, "error": "path-not-allowed"}},
+    {"send": {"id": 5, "token": "$token", "type": "writeFile", "serial": "192.168.1.5:5555", "path": "/data/local/tmp/x", "data": "{}"}, "expect": {"id": 5, "ok": false, "error": "path-not-allowed"}},
+    {"send": {"id": 6, "token": "$token", "type": "writeFile", "serial": "192.168.1.5:5555", "path": "/sdcard/ReTV/", "data": "{}"}, "expect": {"id": 6, "ok": false, "error": "path-not-allowed"}},
+    {"send": {"id": 7, "token": "$token", "type": "writeFile", "serial": "192.168.1.5:5555", "path": "/sdcard/ReTVx/y", "data": "{}"}, "expect": {"id": 7, "ok": false, "error": "path-not-allowed"}},
+    {"send": {"id": 8, "token": "$token", "type": "writeFile", "serial": "192.168.1.5:5555", "path": "sdcard/ReTV/a", "data": "{}"}, "expect": {"id": 8, "ok": false, "error": "path-not-allowed"}},
+    {"send": {"id": 9, "token": "$token", "type": "writeFile", "serial": "192.168.1.5:5555", "path": "/sdcard/ReTV/a\nb", "data": "{}"}, "expect": {"id": 9, "ok": false, "error": "path-not-allowed"}},
+    {"send": {"id": 10, "token": "$token", "type": "writeFile", "serial": "192.168.1.5:5555", "path": "/data/local/tmp/retv-home.apk", "data": "{}"}, "expect": {"id": 10, "ok": false, "error": "path-not-allowed"}},
+    {"send": {"id": 11, "token": "$token", "type": "writeFile", "serial": "192.168.1.5:5555", "path": 5, "data": "{}"}, "expect": {"id": 11, "ok": false, "error": "path-not-allowed"}},
+    {"send": {"id": 12, "token": "$token", "type": "writeFile", "serial": "192.168.1.5:5555", "path": "/sdcard/ReTV/empty.txt", "data": ""}, "expect": {"id": 12, "ok": true, "result": {}}},
+    {"expectAdb": {"pushed": {
+      "/sdcard/ReTV/snap.json": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "/sdcard/ReTV/a/b.txt": "sha256:dfeeecc1163e26fe6d1bc09cec65868b6c5dc9e4bb4f01ff2f6f5d0d3b0b7166",
+      "/sdcard/ReTV/empty.txt": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }}}
+  ]
+}

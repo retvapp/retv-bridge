@@ -1,0 +1,54 @@
+[workspace]
+resolver = "2"
+members = ["crates/core", "crates/adb", "crates/mdns", "crates/cli", "app"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+# Exact versions shared by every crate: `foo = { workspace = true }`.
+[workspace.dependencies]
+retv-bridge-core = { path = "crates/core" }
+retv-bridge-adb = { path = "crates/adb" }
+retv-bridge-mdns = { path = "crates/mdns" }
+async-trait = "=0.1.92"
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+subtle = "=2.6.1"
+rand = "=0.8.6"
+tokio = { version = "=1.54.1", features = ["full"] }
+tauri = { version = "=2.12.5", features = [] }
+tauri-build = { version = "=2.7.4", features = [] }
+# Task 14: the tray app's plugins (each released at least two weeks before use).
+tauri-plugin-single-instance = { version = "=2.5.3", features = ["deep-link"] }
+tauri-plugin-deep-link = "=2.6.1"
+tauri-plugin-autostart = "=2.7.0"
+tauri-plugin-notification = "=2.6.0"
+tauri-plugin-opener = "=2.7.1"
+tauri-plugin-dialog = "=2.8.2"
+# Task 18: the updater, on the OS's TLS like the platform-tools download (no
+# rustls/aws-lc), and without the zip feature (the Windows update is the NSIS .exe).
+tauri-plugin-updater = { version = "=2.13.3", default-features = false, features = ["native-tls", "system-proxy"] }
+sys-locale = "=0.3.2"
+simple-dns = "=0.12.0"
+if-addrs = "=0.15.0"
+socket2 = { version = "=0.6.5", features = ["all"] }
+# Task 11: platform-tools download, checksum, unpack. TLS is the OS's own
+# (native-tls: Security.framework on macOS, SChannel on Windows, OpenSSL on
+# Linux dev/CI); integrity rests on the pinned SHA-256, and this keeps
+# aws-lc-sys/cmake out of the build.
+reqwest = { version = "=0.13.5", default-features = false, features = ["native-tls", "system-proxy"] }
+sha2 = "=0.10.9"
+zip = { version = "=9.1.2", default-features = false, features = ["deflate"] }
+tempfile = "=3.27.0"
+# Task 12: the WebSocket server (handshake only: no TLS, no client connect).
+tokio-tungstenite = { version = "=0.29.0", default-features = false, features = ["handshake"] }
+futures-util = { version = "=0.3.34", default-features = false, features = ["sink", "std"] }
+httparse = "=1.10.1"
+
+# The 64 MiB installApk fixtures hash their bodies; unoptimised SHA-256 makes
+# that take seconds in test builds.
+[profile.dev.package.sha2]
+opt-level = 3

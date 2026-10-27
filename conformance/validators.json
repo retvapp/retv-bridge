@@ -1,0 +1,236 @@
+{
+ "isLanIpv4": [
+  ["10.0.0.1", true],
+  ["172.16.5.4", true],
+  ["172.31.255.1", true],
+  ["192.168.0.42", true],
+  ["169.254.1.1", true],
+  ["10.255.255.255", true],
+  ["192.168.0.0", true],
+  ["172.32.0.1", false],
+  ["172.15.0.1", false],
+  ["127.0.0.1", false],
+  ["0.0.0.0", false],
+  ["192.168.1.256", false],
+  ["192.168.01.1", false],
+  ["1.2.3.4", false],
+  ["8.8.8.8", false],
+  ["192.0.2.1", false],
+  ["100.64.0.5", false],
+  ["", false],
+  ["192.168.1", false],
+  ["192.168.1.5.6", false],
+  ["192.168.1.5; rm -rf /", false],
+  [" 192.168.1.5", false],
+  ["192.168.1.5:5555", false],
+  ["192.168.-1.5", false],
+  [192168, false],
+  [null, false]
+ ],
+ "isPort": [
+  [1, true],
+  [5555, true],
+  [65535, true],
+  [0, false],
+  [65536, false],
+  [-1, false],
+  [5555.5, false],
+  [5555.0, true],
+  [1e3, true],
+  [65535.0, true],
+  [1e5, false],
+  ["5555", false],
+  [null, false]
+ ],
+ "isAllowedDevicePath": [
+  ["/sdcard/ReTV/a/b.json", true],
+  ["/sdcard/ReTV/snap.json", true],
+  ["/sdcard/ReTV/a..b", true],
+  ["/sdcard/ReTV/.hidden", true],
+  ["/sdcard/ReTV/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", true],
+  ["/sdcard/ReTV/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", false],
+  ["/sdcard/ReTV/", false],
+  ["/sdcard/ReTV", false],
+  ["/sdcard/ReTV/./a", false],
+  ["/sdcard/ReTV/../x", false],
+  ["/sdcard/ReTV/a/../b", false],
+  ["/sdcard/ReTV//a", false],
+  ["/sdcard/ReTV/a/", false],
+  ["/sdcard/ReTV/a\nb", false],
+  ["/sdcard/ReTV/a\rb", false],
+  ["/sdcard/ReTV/a\u0000b", false],
+  ["/sdcard/ReTVx/y", false],
+  ["/sdcard/retv/a", false],
+  ["sdcard/ReTV/a", false],
+  ["/data/local/tmp/x", false],
+  ["/data/local/tmp/retv-home.apk", false],
+  ["", false],
+  [null, false],
+  [5, false]
+ ],
+ "isAllowedBinaryPath": [
+  ["/data/local/tmp/retv-home.apk", true],
+  ["/sdcard/ReTV/a.bin", true],
+  ["/sdcard/ReTV/x/y.apk", true],
+  ["/data/local/tmp/other.apk", false],
+  ["/data/local/tmp/retv-home.apk/../x", false],
+  ["/data/local/tmp/retv-home.apkx", false],
+  ["/data/local/tmp/", false],
+  ["/system/app/x.apk", false],
+  ["/sdcard/ReTV/../x", false],
+  ["/sdcard/ReTV/", false],
+  [null, false]
+ ],
+ "splitAddress": [
+  [
+   "192.168.1.5:37000",
+   {
+    "ip": "192.168.1.5",
+    "port": 37000
+   }
+  ],
+  [
+   "192.168.1.5:1",
+   {
+    "ip": "192.168.1.5",
+    "port": 1
+   }
+  ],
+  [
+   "192.168.1.5:65535",
+   {
+    "ip": "192.168.1.5",
+    "port": 65535
+   }
+  ],
+  [
+   "adb-host:5555",
+   {
+    "ip": "adb-host",
+    "port": 5555
+   }
+  ],
+  [
+   "a:b:5555",
+   {
+    "ip": "a:b",
+    "port": 5555
+   }
+  ],
+  ["192.168.1.5", null],
+  ["192.168.1.5:", null],
+  ["192.168.1.5:0", null],
+  ["192.168.1.5:65536", null],
+  ["192.168.1.5:-1", null],
+  ["192.168.1.5:abc", null],
+  ["192.168.1.5:5555x", null],
+  ["192.168.1.5: 5555", null],
+  ["192.168.1.5:5555 ", null],
+  ["192.168.1.5:0x15b3", null],
+  ["192.168.1.5:5e3", null],
+  ["192.168.1.5:+5555", null],
+  ["192.168.1.5:5555.0", null],
+  ["192.168.1.5:05555", null],
+  ["192.168.1.5:Infinity", null],
+  ["", null]
+ ],
+ "decodeBase64": [
+  ["", ""],
+  ["YQ==", "61"],
+  ["YWI=", "6162"],
+  ["YWJj", "616263"],
+  ["YWJjZA==", "61626364"],
+  ["eA==", "78"],
+  ["AAEC/w==", "000102ff"],
+  ["+/+/", "fbffbf"],
+  ["not base64!", null],
+  ["YWJj ZA==", null],
+  ["YWJjZA", null],
+  ["YWJjZA=", null],
+  ["YWJjZA===", null],
+  ["YQ==YQ==", null],
+  ["-_8=", null],
+  ["YR==", null],
+  ["YWJjZB==", null],
+  ["YWJjZE=", null],
+  ["YWJj\n", null],
+  ["=", null],
+  [5, null],
+  [null, null]
+ ],
+ "groupServices": [
+  [
+   [
+    {"name": "adb-1", "service": "_adb-tls-connect._tcp", "address": "192.168.1.7:37123"},
+    {"name": "adb-1", "service": "_adb-tls-pairing._tcp", "address": "192.168.1.7:40111"},
+    {"name": "adb-2", "service": "_adb-tls-connect._tcp", "address": "8.8.8.8:1"}
+   ],
+   [{"name": "adb-1", "ip": "192.168.1.7", "connectPort": 37123, "pairPort": 40111}]
+  ],
+  [[], []],
+  [
+   [
+    {"name": "legacy", "service": "_adb._tcp", "address": "10.0.0.5:5555"},
+    {"name": "stick", "service": "_adb-tls-pairing._tcp", "address": "192.168.1.9:41000"}
+   ],
+   [
+    {"name": "legacy", "ip": "10.0.0.5", "connectPort": 5555, "pairPort": null},
+    {"name": "stick", "ip": "192.168.1.9", "connectPort": null, "pairPort": 41000}
+   ]
+  ],
+  [
+   [
+    {"name": "first", "service": "_adb-tls-connect._tcp", "address": "192.168.1.7:37123"},
+    {"name": "second", "service": "_adb._tcp", "address": "192.168.1.7:5555"},
+    {"name": "second", "service": "_adb-tls-pairing._tcp", "address": "192.168.1.7:40111"},
+    {"name": "second", "service": "_adb-tls-pairing._tcp", "address": "192.168.1.7:40222"}
+   ],
+   [{"name": "first", "ip": "192.168.1.7", "connectPort": 37123, "pairPort": 40222}]
+  ],
+  [
+   [
+    {"name": "cgnat", "service": "_adb-tls-connect._tcp", "address": "100.64.0.5:37123"},
+    {"name": "noport", "service": "_adb-tls-connect._tcp", "address": "192.168.1.7"},
+    {"name": "zero", "service": "_adb-tls-connect._tcp", "address": "192.168.1.7:0"},
+    {"name": "other", "service": "_http._tcp", "address": "192.168.1.8:80"}
+   ],
+   [{"name": "other", "ip": "192.168.1.8", "connectPort": null, "pairPort": null}]
+  ]
+ ],
+ "isAllowedApkUrl": [
+  ["https://retv.app/downloads/retv-home.apk", true],
+  ["https://retv.app/downloads/retv-home-1.0.1-10001.apk", true],
+  ["https://ru.retv.app/downloads/retv-home.apk", true],
+  ["https://retv.app/downloads/apps/smarttube_29.67.apk", true],
+  ["https://retv.app/downloads/a.b-c_D/9.apk", true],
+  ["https://retv.app/downloads/.apk", false],
+  ["https://retv.app/downloads/", false],
+  ["https://retv.app/downloads/x.APK", false],
+  ["https://retv.app/downloads/x.apk.zip", false],
+  ["https://retv.app/downloads/x.zip", false],
+  ["https://retv.app/downloads/../x.apk", false],
+  ["https://retv.app/downloads/a/../x.apk", false],
+  ["https://retv.app/downloads/x..apk", false],
+  ["https://retv.app/downloads/x.apk?v=1", false],
+  ["https://retv.app/downloads/x.apk#y", false],
+  ["https://retv.app/downloads/x?.apk", false],
+  ["https://retv.app/downloads/x%2e.apk", false],
+  ["https://retv.app/downloads/x y.apk", false],
+  ["https://retv.app/downloads/x\n.apk", false],
+  ["https://retv.app/downloads/x\\y.apk", false],
+  ["http://retv.app/downloads/x.apk", false],
+  ["https://retv.app:443/downloads/x.apk", false],
+  ["https://RETV.app/downloads/x.apk", false],
+  ["https://retv.app/Downloads/x.apk", false],
+  ["https://retv.app.evil.example/downloads/x.apk", false],
+  ["https://evil.example/downloads/x.apk", false],
+  ["https://evil.example/https://retv.app/downloads/x.apk", false],
+  ["https://user@retv.app/downloads/x.apk", false],
+  ["https://en.retv.app/downloads/x.apk", false],
+  ["https://retv.app/x.apk", false],
+  ["/downloads/x.apk", false],
+  ["", false],
+  [5, false],
+  [null, false]
+ ]
+}

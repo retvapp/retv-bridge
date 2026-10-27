@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ReTV Bridge</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <img src="icon.png" alt="" width="28" height="28" />
+      <h1 id="title"></h1>
+    </header>
+    <nav>
+      <button type="button" class="tab" id="tab-code" data-tab="code"></button>
+      <button type="button" class="tab" id="tab-log" data-tab="log"></button>
+    </nav>
+
+    <main id="view-code">
+      <div id="notices"></div>
+
+      <section id="adb-consent" class="card" hidden>
+        <p id="adb-consent-text"></p>
+        <p><a href="#" id="adb-terms"></a></p>
+        <button type="button" class="primary" id="adb-accept"></button>
+      </section>
+
+      <section id="adb-downloading" class="card" hidden>
+        <p id="adb-downloading-text"></p>
+        <progress id="adb-progress" max="1" value="0"></progress>
+      </section>
+
+      <section id="adb-failed" class="card" hidden>
+        <p id="adb-failed-text"></p>
+        <div class="row">
+          <button type="button" class="primary" id="adb-retry"></button>
+          <button type="button" id="adb-pick"></button>
+        </div>
+      </section>
+
+      <section id="adb-start-failed" class="card" hidden>
+        <p id="adb-start-failed-text"></p>
+        <button type="button" class="primary" id="adb-start-retry"></button>
+      </section>
+
+      <section id="pair" hidden>
+        <div class="label" id="code-label"></div>
+        <div class="code" id="code"></div>
+        <p class="muted" id="code-none"></p>
+        <p class="tv" id="tv"></p>
+        <button type="button" class="primary" id="open"></button>
+      </section>
+
+      <p class="note" id="close-note"></p>
+    </main>
+
+    <main id="view-log" hidden>
+      <pre id="log"></pre>
+      <p class="muted" id="log-empty"></p>
+    </main>
+  </body>
+</html>

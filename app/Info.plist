@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleLocalizations</key>
+  <array>
+    <string>en</string>
+    <string>ru</string>
+    <string>uk</string>
+  </array>
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>To find your TV and connect to it on your home network</string>
+  <key>NSBonjourServices</key>
+  <array>
+    <string>_adb-tls-connect._tcp</string>
+    <string>_adb-tls-pairing._tcp</string>
+    <string>_adb._tcp</string>
+  </array>
+</dict>
+</plist>

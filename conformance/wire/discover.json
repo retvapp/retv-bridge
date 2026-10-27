@@ -1,0 +1,18 @@
+{
+  "description": "discover returns the TVs adb sees over mDNS, as { name, ip, connectPort, pairPort } with null for a missing port.",
+  "adb": {
+    "tvs": [
+      {"name": "adb-X", "ip": "192.168.1.7", "connectPort": 37123, "pairPort": null},
+      {"name": "adb-Y", "ip": "10.0.0.4", "connectPort": null, "pairPort": 40111}
+    ]
+  },
+  "steps": [
+    {"open": {"origin": "https://retv.app", "host": "$host"}, "expectStatus": 101},
+    {"send": {"id": 1, "token": "$token", "type": "discover"}, "expect": {"id": 1, "ok": true, "result": {"tvs": [
+      {"name": "adb-X", "ip": "192.168.1.7", "connectPort": 37123, "pairPort": null},
+      {"name": "adb-Y", "ip": "10.0.0.4", "connectPort": null, "pairPort": 40111}
+    ]}}},
+    {"send": {"id": 2, "type": "discover"}, "expect": {"id": 2, "ok": false, "error": "bad-token"}},
+    {"expectClose": true, "closeCode": 1008}
+  ]
+}

@@ -1,0 +1,23 @@
+[package]
+name = "retv-bridge-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+subtle = { workspace = true }
+rand = { workspace = true }
+sha2 = { workspace = true }
+tokio = { workspace = true }
+tokio-tungstenite = { workspace = true }
+futures-util = { workspace = true }
+httparse = { workspace = true }
+
+[dev-dependencies]
+# The conformance runner's client side (tests only; resolver 2 keeps it out of
+# normal builds).
+tokio-tungstenite = { workspace = true, features = ["connect"] }

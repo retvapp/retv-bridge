@@ -1,0 +1,27 @@
+{
+  "description": "A failed connect answers the transport's error code as the error; an unexpected failure without a code is internal. The socket stays usable.",
+  "adb": {
+    "devices": {
+      "192.168.1.10:5555": {"connectError": "adb-server-unreachable"},
+      "192.168.1.11:5555": {"connectError": "unauthorized"},
+      "192.168.1.12:5555": {"connectError": "device-offline"},
+      "192.168.1.13:5555": {"connectError": "device-not-found"},
+      "192.168.1.14:5555": {"connectError": "connection-lost"},
+      "192.168.1.15:5555": {"connectError": "internal"},
+      "192.168.1.5:5555": {"model": "MiTV-AYFR0"}
+    }
+  },
+  "steps": [
+    {"open": {"origin": "http://127.0.0.1:5180", "host": "$host"}, "expectStatus": 101},
+    {"send": {"id": 1, "token": "$token", "type": "connect", "ip": "192.168.1.10", "port": 5555}, "expect": {"id": 1, "ok": false, "error": "adb-server-unreachable"}},
+    {"send": {"id": 2, "token": "$token", "type": "connect", "ip": "192.168.1.11", "port": 5555}, "expect": {"id": 2, "ok": false, "error": "unauthorized"}},
+    {"send": {"id": 3, "token": "$token", "type": "connect", "ip": "192.168.1.12", "port": 5555}, "expect": {"id": 3, "ok": false, "error": "device-offline"}},
+    {"send": {"id": 4, "token": "$token", "type": "connect", "ip": "192.168.1.13", "port": 5555}, "expect": {"id": 4, "ok": false, "error": "device-not-found"}},
+    {"send": {"id": 5, "token": "$token", "type": "connect", "ip": "192.168.1.14", "port": 5555}, "expect": {"id": 5, "ok": false, "error": "connection-lost"}},
+    {"send": {"id": 6, "token": "$token", "type": "connect", "ip": "192.168.1.15", "port": 5555}, "expect": {"id": 6, "ok": false, "error": "internal"}},
+    {"send": {"id": 7, "token": "$token", "type": "connect", "ip": "192.168.1.99", "port": 5555}, "expect": {"id": 7, "ok": false, "error": "device-unreachable"}},
+    {"send": {"id": 8, "token": "$token", "type": "run", "serial": "192.168.1.11:5555", "cmd": "echo hi"}, "expect": {"id": 8, "ok": false, "error": "unknown-serial"}},
+    {"send": {"id": 9, "token": "$token", "type": "connect", "ip": "192.168.1.5", "port": 5555}, "expect": {"id": 9, "ok": true, "result": {"serial": "192.168.1.5:5555", "model": "MiTV-AYFR0"}}},
+    {"expectAdb": {"connected": ["192.168.1.5:5555"]}}
+  ]
+}

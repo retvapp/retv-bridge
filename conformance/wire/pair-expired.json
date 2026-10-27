@@ -1,0 +1,21 @@
+{
+  "description": "pairFinish with no live code is pair-expired; a code lives 120 s; a code that is not a string or is over 16 characters is bad-request and not a miss.",
+  "pairCodes": ["482917", "135790"],
+  "steps": [
+    {"open": {"origin": "http://127.0.0.1:5180", "host": "$host"}, "expectStatus": 101},
+    {"send": {"id": 1, "type": "pairFinish", "code": "482917"}, "expect": {"id": 1, "ok": false, "error": "pair-expired"}},
+    {"send": {"id": 2, "type": "pairStart"}, "expect": {"id": 2, "ok": true, "result": {"expiresIn": 120}}},
+    {"advanceMs": 10000},
+    {"send": {"id": 3, "type": "pairStart"}, "expect": {"id": 3, "ok": true, "result": {"expiresIn": 110}}},
+    {"send": {"id": 4, "type": "pairFinish", "code": 482917}, "expect": {"id": 4, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 5, "type": "pairFinish"}, "expect": {"id": 5, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 6, "type": "pairFinish", "code": "48291748291748291"}, "expect": {"id": 6, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 7, "type": "pairFinish", "code": "4829174829174829"}, "expect": {"id": 7, "ok": false, "error": "bad-code", "result": {"attemptsLeft": 4}}},
+    {"advanceMs": 109999},
+    {"send": {"id": 8, "type": "pairStart"}, "expect": {"id": 8, "ok": true, "result": {"expiresIn": 1}}},
+    {"advanceMs": 1},
+    {"send": {"id": 9, "type": "pairFinish", "code": "482917"}, "expect": {"id": 9, "ok": false, "error": "pair-expired"}},
+    {"send": {"id": 10, "type": "pairStart"}, "expect": {"id": 10, "ok": true, "result": {"expiresIn": 120}}},
+    {"send": {"id": 11, "type": "pairFinish", "code": "$code"}, "expect": {"id": 11, "ok": true, "result": {"token": "$token"}}}
+  ]
+}

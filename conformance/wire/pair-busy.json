@@ -1,0 +1,22 @@
+{
+  "description": "A live code is bound to the Origin that started it, across sockets: another Origin gets pair-busy with retryIn for start and finish (its code is never checked), the same Origin on a new socket can finish.",
+  "pairCodes": ["482917", "135790"],
+  "steps": [
+    {"open": {"origin": "http://127.0.0.1:5180", "host": "$host"}, "expectStatus": 101},
+    {"socket": 1, "open": {"origin": "https://retv.app", "host": "$host"}, "expectStatus": 101},
+    {"send": {"id": 1, "type": "pairStart"}, "expect": {"id": 1, "ok": true, "result": {"expiresIn": 120}}},
+    {"socket": 1, "send": {"id": 1, "type": "pairStart"}, "expect": {"id": 1, "ok": false, "error": "pair-busy", "result": {"retryIn": 120}}},
+    {"socket": 1, "send": {"id": 2, "type": "pairFinish", "code": "$code"}, "expect": {"id": 2, "ok": false, "error": "pair-busy", "result": {"retryIn": 120}}},
+    {"advanceMs": 20000},
+    {"socket": 1, "send": {"id": 3, "type": "pairFinish", "code": "000000"}, "expect": {"id": 3, "ok": false, "error": "pair-busy", "result": {"retryIn": 100}}},
+    {"socket": 1, "send": {"id": 4, "type": "pairFinish", "code": "000000"}, "expect": {"id": 4, "ok": false, "error": "pair-busy", "result": {"retryIn": 100}}},
+    {"socket": 1, "send": {"id": 5, "type": "pairFinish", "code": "000000"}, "expect": {"id": 5, "ok": false, "error": "pair-busy", "result": {"retryIn": 100}}},
+    {"socket": 1, "send": {"id": 6, "type": "pairFinish", "code": "000000"}, "expect": {"id": 6, "ok": false, "error": "pair-busy", "result": {"retryIn": 100}}},
+    {"socket": 1, "send": {"id": 7, "type": "pairFinish", "code": "000000"}, "expect": {"id": 7, "ok": false, "error": "pair-busy", "result": {"retryIn": 100}}},
+    {"socket": 2, "open": {"origin": "http://127.0.0.1:5180", "host": "$host"}, "expectStatus": 101},
+    {"socket": 2, "send": {"id": 1, "type": "pairFinish", "code": "000000"}, "expect": {"id": 1, "ok": false, "error": "bad-code", "result": {"attemptsLeft": 4}}},
+    {"socket": 2, "send": {"id": 2, "type": "pairFinish", "code": "482917"}, "expect": {"id": 2, "ok": true, "result": {"token": "$token"}}},
+    {"socket": 1, "send": {"id": 8, "type": "pairStart"}, "expect": {"id": 8, "ok": true, "result": {"expiresIn": 120}}},
+    {"socket": 1, "send": {"id": 9, "type": "pairFinish", "code": "135790"}, "expect": {"id": 9, "ok": true, "result": {"token": "$token"}}}
+  ]
+}

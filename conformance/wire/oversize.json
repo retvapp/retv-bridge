@@ -1,0 +1,10 @@
+{
+  "description": "A message over 1 MiB (1048576 bytes) closes the socket with 1009 (message too big); one of exactly 1 MiB is still read.",
+  "steps": [
+    {"open": {"origin": "http://127.0.0.1:5180", "host": "$host"}, "expectStatus": 101},
+    {"sendOversize": 1048576, "expect": {"id": -1, "ok": false, "error": "bad-request"}},
+    {"sendOversize": 1048577, "expectClose": true, "closeCode": 1009},
+    {"socket": 1, "open": {"origin": "http://127.0.0.1:5180", "host": "$host"}, "expectStatus": 101},
+    {"socket": 1, "send": {"id": 1, "type": "hello"}, "expect": {"id": 1, "ok": true, "result": {"version": "$any", "protocol": 2, "features": ["installApk"], "adb": true, "paired": false}}}
+  ]
+}

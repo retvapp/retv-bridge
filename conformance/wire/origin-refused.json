@@ -1,0 +1,26 @@
+{
+  "description": "The upgrade is refused with 403 for a foreign or missing Origin and for a foreign Host (DNS rebinding), before any message; refusals never touch pairing. Origin and Host match exactly, case-sensitively. A plain HTTP request (no upgrade) gets 426.",
+  "pairCodes": ["482917"],
+  "steps": [
+    {"open": {"origin": "https://evil.example", "host": "$host"}, "expectStatus": 403},
+    {"open": {"origin": "http://127.0.0.1:5181", "host": "$host"}, "expectStatus": 403},
+    {"open": {"origin": "null", "host": "$host"}, "expectStatus": 403},
+    {"open": {"origin": "https://retv.app.evil.example", "host": "$host"}, "expectStatus": 403},
+    {"open": {"origin": "http://retv.app", "host": "$host"}, "expectStatus": 403},
+    {"open": {"origin": "https://retv.app/", "host": "$host"}, "expectStatus": 403},
+    {"open": {"origin": null, "host": "$host"}, "expectStatus": 403},
+    {"open": {"origin": "http://127.0.0.1:5180", "host": "evil.example:$port"}, "expectStatus": 403},
+    {"open": {"origin": "http://127.0.0.1:5180", "host": "127.0.0.1"}, "expectStatus": 403},
+    {"open": {"origin": "http://127.0.0.1:5180", "host": "192.168.1.5:$port"}, "expectStatus": 403},
+    {"open": {"origin": "HTTPS://RETV.APP", "host": "$host"}, "expectStatus": 403},
+    {"open": {"origin": "https://ReTV.app", "host": "$host"}, "expectStatus": 403},
+    {"open": {"origin": "http://LOCALHOST:5180", "host": "$host"}, "expectStatus": 403},
+    {"open": {"origin": "http://127.0.0.1:5180", "host": "LOCALHOST:$port"}, "expectStatus": 403},
+    {"open": {"origin": "http://127.0.0.1:5180", "host": "Localhost:$port"}, "expectStatus": 403},
+    {"open": {"origin": "http://127.0.0.1:5180", "host": "127.0.0.1:$port."}, "expectStatus": 403},
+    {"httpGet": "/", "expectStatus": 426},
+    {"open": {"origin": "http://127.0.0.1:5180", "host": "$host"}, "expectStatus": 101},
+    {"send": {"id": 1, "type": "pairStart"}, "expect": {"id": 1, "ok": true, "result": {"expiresIn": 120}}},
+    {"send": {"id": 2, "type": "pairFinish", "code": "482917"}, "expect": {"id": 2, "ok": true, "result": {"token": "$token"}}}
+  ]
+}

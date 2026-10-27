@@ -1,0 +1,9 @@
+{
+  "description": "hello reports adb:false when the local adb server does not answer.",
+  "adb": {"available": false},
+  "steps": [
+    {"open": {"origin": "https://retv.app", "host": "$host"}, "expectStatus": 101},
+    {"send": {"id": 1, "token": "$token", "type": "hello", "version": 1}, "expect": {"id": 1, "ok": true, "result": {"version": "$any", "protocol": 2, "features": ["installApk"], "adb": false, "paired": true}}},
+    {"send": {"id": 2, "type": "hello"}, "expect": {"id": 2, "ok": true, "result": {"version": "$any", "protocol": 2, "features": ["installApk"], "adb": false, "paired": false}}}
+  ]
+}

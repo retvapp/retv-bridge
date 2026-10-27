@@ -1,0 +1,43 @@
+{
+  "version": "1.0.0",
+  "notes": "Faster TV search\nFixed pairing",
+  "pub_date": "2026-10-27T12:00:00Z",
+  "platforms": {
+    "darwin-aarch64": {
+      "url": "https://retv.app/downloads/ReTV-Bridge-1.0.0-mac-universal.app.tar.gz",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZQ=="
+    },
+    "darwin-x86_64": {
+      "url": "https://retv.app/downloads/ReTV-Bridge-1.0.0-mac-universal.app.tar.gz",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZQ=="
+    },
+    "windows-x86_64": {
+      "url": "https://retv.app/downloads/ReTV-Bridge-1.0.0-win-x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZQ=="
+    }
+  },
+  "retv": {
+    "minOs": {
+      "mac": "11.0",
+      "win": "10.0.19041"
+    },
+    "teamId": "ABCDE12345",
+    "winSigner": "SignPath Foundation",
+    "notes": {
+      "en": [
+        "Faster TV search",
+        "Fixed pairing"
+      ]
+    },
+    "mac": {
+      "url": "https://retv.app/downloads/ReTV-Bridge-1.0.0-mac-universal.dmg",
+      "sha256": "abababababababababababababababababababababababababababababababab",
+      "size": 4096
+    },
+    "win": {
+      "url": "https://retv.app/downloads/ReTV-Bridge-1.0.0-win-x64-setup.exe",
+      "sha256": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+      "size": 3000
+    }
+  }
+}

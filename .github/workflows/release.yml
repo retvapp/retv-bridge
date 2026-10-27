@@ -1,0 +1,562 @@
+# Release builds for tags bridge-v<semver>: a universal macOS DMG (ad-hoc
+# signed and not notarized while no Apple credentials are set, the default;
+# Developer ID signed and notarized once they are), a SignPath-signed Windows
+# NSIS installer, and Tauri updater signatures made over the final (signed)
+# bytes. The result is a DRAFT GitHub release; nothing is published or staged
+# on retv.app from here.
+#
+# Secrets live in the `release` environment (the owner is its required
+# reviewer). The `mac` and `win-sign` jobs become ready at the same moment, so
+# one approval covers both. SIGNPATH_ORGANIZATION_ID and BRIDGE_MAC_ONLY are
+# repository variables: a job-level `if:` is evaluated before the environment is
+# entered.
+#
+# Mac first: with the repository variable BRIDGE_MAC_ONLY = true no Windows job
+# runs and the draft holds the Mac assets only; scripts/release-retv-bridge.sh
+# --mac-only stages it with a manifest that has no Windows entry.
+name: Release
+
+on:
+  push:
+    tags: ["bridge-v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  # The CLI that bundles and signs; 2.12.x goes with tauri 2.12 in Cargo.lock.
+  TAURI_CLI_VERSION: "2.12.4"
+
+jobs:
+  # Seconds, before anything long: the tag, tauri.conf.json, Cargo.toml and Cargo.lock
+  # agree, the updater key is real, and release-notes/<version>.json follows
+  # release-notes/README.md (the rules the download manifest applies at staging).
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Version and release notes
+        id: version
+        run: |
+          version="$(scripts/release-version.sh "$GITHUB_REF_NAME")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: check
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Release script tests
+        run: bash scripts/test-release-scripts.sh
+
+      - name: Install toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - name: Install Tauri Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev
+
+      - name: Test
+        run: cargo test --workspace --locked
+
+  # Pass 0 of the two-pass Windows signing (no secrets here). Tauri's signCommand is
+  # scripts/win-sign-hook.mjs in capture mode: it signs nothing, it copies out the app
+  # (retv-bridge.exe, after Tauri patched the bundle type into it) and the NSIS
+  # uninstaller (from makensis' !uninstfinalize), which SignPath signs in win-sign.
+  # The setup built here, with that unsigned payload, is the -UNSIGNED internal beta
+  # when SignPath is not set up. No updater artifacts: the updater signature must cover
+  # the final, signed installer, and no updater key is available to this job.
+  win-build:
+    needs: test
+    if: vars.BRIDGE_MAC_ONLY != 'true'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      VERSION: ${{ needs.test.outputs.version }}
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      inner-artifact-id: ${{ steps.upload-inner.outputs.artifact-id }}
+      uninstaller-sha256: ${{ steps.inner.outputs.uninstaller-sha256 }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install toolchain
+        shell: bash
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - name: Install tauri-cli
+        shell: bash
+        run: cargo install tauri-cli --version "=$TAURI_CLI_VERSION" --locked
+
+      # No runner path in the binaries (panic locations): see scripts/remap-path-flags.sh.
+      - name: Remap build paths
+        shell: bash
+        run: |
+          flags="$(scripts/remap-path-flags.sh "$PWD")"
+          if grep -q ' ' <<< "$flags"; then echo "a build path has a space; RUSTFLAGS cannot carry it" >&2; exit 1; fi
+          echo "RUSTFLAGS=$(tr '\n' ' ' <<< "$flags")" >> "$GITHUB_ENV"
+
+      - name: Sign hook configuration (capture)
+        shell: pwsh
+        run: |
+          $hook = Join-Path $env:GITHUB_WORKSPACE 'scripts\win-sign-hook.mjs'
+          $inner = Join-Path $env:GITHUB_WORKSPACE 'dist\inner'
+          New-Item -ItemType Directory -Force -Path $inner | Out-Null
+          @{ bundle = @{ createUpdaterArtifacts = $false; windows = @{ signCommand = @{ cmd = 'node'; args = @($hook, 'capture', $inner, '%1') } } } } |
+            ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8NoBOM (Join-Path $env:RUNNER_TEMP 'sign-capture.json')
+
+      - name: Build the NSIS installer (payload unsigned, captured for pass 1)
+        shell: bash
+        run: cargo tauri build --bundles nsis --config "$RUNNER_TEMP/sign-capture.json" -- --locked
+
+      - name: Check the captured payload
+        id: inner
+        shell: bash
+        run: |
+          for f in retv-bridge.exe uninstall.exe uninstall.exe.sha256; do
+            [ -s "dist/inner/$f" ] || { echo "the sign hook did not capture $f" >&2; exit 1; }
+          done
+          sha="$(tr -d '[:space:]' < dist/inner/uninstall.exe.sha256)"
+          [[ "$sha" =~ ^[0-9a-f]{64}$ ]] || { echo "bad uninstaller hash: $sha" >&2; exit 1; }
+          echo "uninstaller-sha256=$sha" >> "$GITHUB_OUTPUT"
+          rm dist/inner/uninstall.exe.sha256
+
+      - name: Name the installer
+        shell: bash
+        run: |
+          shopt -s nullglob
+          exes=(target/release/bundle/nsis/*-setup.exe)
+          if [ "${#exes[@]}" -ne 1 ]; then
+            echo "expected one setup exe, found ${#exes[@]}" >&2
+            exit 1
+          fi
+          cp "${exes[0]}" "dist/ReTV-Bridge-$VERSION-win-x64-setup.exe"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        id: upload
+        with:
+          name: win-unsigned
+          path: dist/ReTV-Bridge-${{ needs.test.outputs.version }}-win-x64-setup.exe
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        id: upload-inner
+        with:
+          name: win-inner-unsigned
+          path: |
+            dist/inner/retv-bridge.exe
+            dist/inner/uninstall.exe
+          if-no-files-found: error
+
+  # Two SignPath requests, each approved by the owner in SignPath:
+  #   pass 1  the app and the uninstaller (artifact configuration inner-binaries);
+  #   pass 2  the installer bundled around them again (nsis-installer).
+  # Between them `cargo tauri bundle` packs the signed app (--no-binary-patching keeps
+  # its signature) and the hook in swap mode puts the signed uninstaller in place of the
+  # one makensis builds, after checking it is the very uninstaller signed in pass 1.
+  win-sign:
+    needs: [test, win-build]
+    if: vars.SIGNPATH_ORGANIZATION_ID != '' && vars.BRIDGE_MAC_ONLY != 'true'
+    runs-on: windows-latest
+    environment: release
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      actions: read
+    env:
+      VERSION: ${{ needs.test.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install toolchain
+        shell: bash
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - name: Install tauri-cli
+        shell: bash
+        run: cargo install tauri-cli --version "=$TAURI_CLI_VERSION" --locked
+
+      - name: Pass 1, the app and the uninstaller
+        uses: signpath/github-action-submit-signing-request@ced31329c0317e779dad2eec2a7c3bb46ea1343e # v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: retv-bridge
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: inner-binaries
+          github-artifact-id: ${{ needs.win-build.outputs.inner-artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: signed-inner
+
+      - name: Verify the payload's Authenticode signatures
+        shell: pwsh
+        run: |
+          foreach ($name in 'retv-bridge.exe', 'uninstall.exe') {
+            $sig = Get-AuthenticodeSignature -FilePath "signed-inner/$name"
+            Write-Output "${name}: status $($sig.Status); signer: $($sig.SignerCertificate.Subject)"
+            if ($sig.Status -ne 'Valid') { throw "${name}: Authenticode status is $($sig.Status)" }
+            $cn = $sig.SignerCertificate.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false)
+            if ($cn -notlike '*SignPath Foundation*') { throw "${name}: signer CN is '$cn', expected SignPath Foundation" }
+          }
+
+      - name: Sign hook configuration (swap)
+        shell: pwsh
+        env:
+          UNINSTALLER_SHA256: ${{ needs.win-build.outputs.uninstaller-sha256 }}
+        run: |
+          $hook = Join-Path $env:GITHUB_WORKSPACE 'scripts\win-sign-hook.mjs'
+          $signed = Join-Path $env:GITHUB_WORKSPACE 'signed-inner'
+          @{ bundle = @{ createUpdaterArtifacts = $false; windows = @{ signCommand = @{ cmd = 'node'; args = @($hook, 'swap', $signed, $env:UNINSTALLER_SHA256, '%1') } } } } |
+            ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8NoBOM (Join-Path $env:RUNNER_TEMP 'sign-swap.json')
+
+      # The signed app goes where `tauri bundle` reads the main binary; nothing is compiled.
+      - name: Bundle the NSIS installer around the signed payload
+        shell: bash
+        run: |
+          mkdir -p target/release
+          cp signed-inner/retv-bridge.exe target/release/retv-bridge.exe
+          cargo tauri bundle --bundles nsis --no-binary-patching --config "$RUNNER_TEMP/sign-swap.json"
+          shopt -s nullglob
+          exes=(target/release/bundle/nsis/*-setup.exe)
+          if [ "${#exes[@]}" -ne 1 ]; then
+            echo "expected one setup exe, found ${#exes[@]}" >&2
+            exit 1
+          fi
+          mkdir -p presign
+          cp "${exes[0]}" "presign/ReTV-Bridge-$VERSION-win-x64-setup.exe"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        id: upload-presign
+        with:
+          name: win-presign
+          path: presign/ReTV-Bridge-${{ needs.test.outputs.version }}-win-x64-setup.exe
+          if-no-files-found: error
+
+      - name: Pass 2, the installer
+        uses: signpath/github-action-submit-signing-request@ced31329c0317e779dad2eec2a7c3bb46ea1343e # v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: retv-bridge
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: nsis-installer
+          github-artifact-id: ${{ steps.upload-presign.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: signed
+
+      - name: Verify the Authenticode signature
+        shell: pwsh
+        run: |
+          $file = "signed/ReTV-Bridge-$env:VERSION-win-x64-setup.exe"
+          $sig = Get-AuthenticodeSignature -FilePath $file
+          Write-Output "status: $($sig.Status); signer: $($sig.SignerCertificate.Subject)"
+          if ($sig.Status -ne 'Valid') { throw "Authenticode status is $($sig.Status)" }
+          $cn = $sig.SignerCertificate.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false)
+          if ($cn -notlike '*SignPath Foundation*') { throw "signer CN is '$cn', expected SignPath Foundation" }
+
+      # The updater signature is made over the SIGNED installer.
+      - name: Updater signature
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: cargo tauri signer sign --app-version "$VERSION" "signed/ReTV-Bridge-$VERSION-win-x64-setup.exe"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: win-signed
+          path: |
+            signed/ReTV-Bridge-${{ needs.test.outputs.version }}-win-x64-setup.exe
+            signed/ReTV-Bridge-${{ needs.test.outputs.version }}-win-x64-setup.exe.sig
+          if-no-files-found: error
+
+  mac:
+    # Waits for win-build so that its approval is asked together with win-sign.
+    needs: [test, win-build]
+    # win-build is skipped on a Mac-only release; the Mac build runs all the same.
+    if: >-
+      !cancelled()
+      && needs.test.result == 'success'
+      && (needs.win-build.result == 'success'
+          || (vars.BRIDGE_MAC_ONLY == 'true' && needs.win-build.result == 'skipped'))
+    runs-on: macos-14
+    environment: release
+    timeout-minutes: 120
+    env:
+      VERSION: ${{ needs.test.outputs.version }}
+    outputs:
+      route: ${{ steps.notary.outputs.route }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install toolchain
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Install tauri-cli
+        run: cargo install tauri-cli --version "=$TAURI_CLI_VERSION" --locked
+
+      # No runner path in the binaries (panic locations): see scripts/remap-path-flags.sh.
+      - name: Remap build paths
+        run: |
+          flags="$(scripts/remap-path-flags.sh "$PWD")"
+          if grep -q ' ' <<< "$flags"; then echo "a build path has a space; RUSTFLAGS cannot carry it" >&2; exit 1; fi
+          echo "RUSTFLAGS=$(tr '\n' ' ' <<< "$flags")" >> "$GITHUB_ENV"
+
+      # Picks the Mac route. The credentials stay in step-level env:
+      # Tauri tries APPLE_ID first and takes an empty variable for a set one,
+      # so each route gets its own build step with only its own variables.
+      #   unsigned  no Apple secret at all (the default, owner decision
+      #             2026-10-27): ad-hoc signed, not notarized, no Developer
+      #             ID certificate and so no name in a signature;
+      #   api       App Store Connect key; appleid: Apple ID + app password.
+      # A partial set of Apple secrets fails rather than falling back to
+      # unsigned. The committed release-team-id must agree with the route
+      # (UNSIGNED-ADHOC for unsigned, the Team ID otherwise): the staging
+      # script checks the release against that same file.
+      - name: Mac route
+        id: notary
+        env:
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          committed="$({ grep -v '^[[:space:]]*#' release-team-id || true; } | tr -d '[:space:]')"
+          any_apple="$APPLE_API_KEY_P8$APPLE_API_KEY$APPLE_API_ISSUER$APPLE_ID$APPLE_PASSWORD$APPLE_CERTIFICATE$APPLE_CERTIFICATE_PASSWORD$APPLE_SIGNING_IDENTITY$APPLE_TEAM_ID"
+          if [ -n "$APPLE_API_KEY_P8" ] && [ -n "$APPLE_API_KEY" ] && [ -n "$APPLE_API_ISSUER" ]; then
+            route=api
+          elif [ -n "$APPLE_ID" ] && [ -n "$APPLE_PASSWORD" ]; then
+            route=appleid
+          elif [ -z "$any_apple" ]; then
+            route=unsigned
+          else
+            echo "some Apple secrets are set but no notarization route is complete (set APPLE_API_KEY + APPLE_API_ISSUER + APPLE_API_KEY_P8, or APPLE_ID + APPLE_PASSWORD; or remove every APPLE_* secret for the unsigned route)" >&2
+            exit 1
+          fi
+          if [ "$route" = unsigned ] && [ "$committed" != UNSIGNED-ADHOC ]; then
+            echo "no Apple secrets, but release-team-id says '$committed': write UNSIGNED-ADHOC there for the unsigned route, or add the Apple secrets" >&2
+            exit 1
+          fi
+          if [ "$route" != unsigned ] && [ "$committed" = UNSIGNED-ADHOC ]; then
+            echo "Apple secrets are set ($route), but release-team-id says UNSIGNED-ADHOC: write the Team ID there to sign, or remove the Apple secrets" >&2
+            exit 1
+          fi
+          if [ "$route" = api ]; then
+            umask 077
+            printf '%s\n' "$APPLE_API_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
+          fi
+          echo "Mac route: $route"
+          echo "route=$route" >> "$GITHUB_OUTPUT"
+
+      # Identity "-": Tauri signs every binary and the .app ad-hoc (Apple
+      # Silicon runs no unsigned arm64 code), skips notarization (no
+      # credentials here), leaves the DMG unsigned and writes the updater
+      # .app.tar.gz.sig over the ad-hoc signed app.
+      - name: Build (ad-hoc signed, not notarized)
+        if: steps.notary.outputs.route == 'unsigned'
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
+        env:
+          APPLE_SIGNING_IDENTITY: "-"
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tauriScript: cargo tauri
+          args: --target universal-apple-darwin -- --locked
+
+      # Builds both architectures, signs (hardened runtime), notarizes and
+      # staples the .app, signs the DMG, and writes the updater .app.tar.gz.sig.
+      - name: Build (notarized with the App Store Connect key)
+        if: steps.notary.outputs.route == 'api'
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_PATH: ${{ runner.temp }}/AuthKey.p8
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tauriScript: cargo tauri
+          args: --target universal-apple-darwin -- --locked
+
+      - name: Build (notarized with the Apple ID)
+        if: steps.notary.outputs.route == 'appleid'
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tauriScript: cargo tauri
+          args: --target universal-apple-darwin -- --locked
+
+      # Signed routes: notarizes and staples the DMG itself, then codesign
+      # --verify --deep --strict, the TeamIdentifier, spctl -t install and
+      # stapler validate on the DMG, and codesign + stapler on the app inside
+      # .app.tar.gz. Unsigned route (--ad-hoc): codesign --verify --deep
+      # --strict and an ad-hoc signature without a TeamIdentifier on the app
+      # and on the app inside .app.tar.gz; no notarytool, stapler or spctl.
+      # mac-finish.sh treats an empty variable as unset.
+      - name: Verify and name the assets (notarize the DMG when signed)
+        env:
+          ROUTE: ${{ steps.notary.outputs.route }}
+          APPLE_TEAM_ID: ${{ steps.notary.outputs.route != 'unsigned' && secrets.APPLE_TEAM_ID || '' }}
+          APPLE_API_KEY: ${{ steps.notary.outputs.route == 'api' && secrets.APPLE_API_KEY || '' }}
+          APPLE_API_ISSUER: ${{ steps.notary.outputs.route == 'api' && secrets.APPLE_API_ISSUER || '' }}
+          APPLE_API_KEY_PATH: ${{ runner.temp }}/AuthKey.p8
+          APPLE_ID: ${{ steps.notary.outputs.route == 'appleid' && secrets.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ steps.notary.outputs.route == 'appleid' && secrets.APPLE_PASSWORD || '' }}
+        run: |
+          flags=()
+          [ "$ROUTE" != unsigned ] || flags+=(--ad-hoc)
+          scripts/mac-finish.sh --version "$VERSION" \
+            --bundle-dir target/universal-apple-darwin/release/bundle \
+            --out dist ${flags[@]+"${flags[@]}"}
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mac
+          path: dist/
+          if-no-files-found: error
+
+      - name: Remove the App Store Connect key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/AuthKey.p8"
+
+  publish:
+    needs: [test, win-build, win-sign, mac]
+    # Without SignPath (repository variable unset) the unsigned installer goes
+    # into the draft as -UNSIGNED.exe for internal beta; scripts/release-retv-bridge.sh
+    # never stages it (only the Mac half, with --mac-only). With SignPath set up, a
+    # failed win-sign stops the release.
+    # A Mac-only release (BRIDGE_MAC_ONLY) has no Windows asset at all.
+    if: >-
+      !cancelled()
+      && needs.test.result == 'success'
+      && needs.mac.result == 'success'
+      && ((vars.BRIDGE_MAC_ONLY == 'true' && needs.win-build.result == 'skipped')
+          || (vars.BRIDGE_MAC_ONLY != 'true'
+              && needs.win-build.result == 'success'
+              && (needs.win-sign.result == 'success'
+                  || (vars.SIGNPATH_ORGANIZATION_ID == '' && needs.win-sign.result == 'skipped'))))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.test.outputs.version }}
+      SIGNED: ${{ needs.win-sign.result == 'success' }}
+      MAC_ONLY: ${{ vars.BRIDGE_MAC_ONLY == 'true' }}
+      MAC_ROUTE: ${{ needs.mac.outputs.route }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: mac
+          path: assets
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: needs.win-sign.result == 'success'
+        with:
+          name: win-signed
+          path: assets
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: needs.win-sign.result != 'success' && vars.BRIDGE_MAC_ONLY != 'true'
+        with:
+          name: win-unsigned
+          path: unsigned
+
+      - name: Mark the unsigned installer
+        if: needs.win-sign.result != 'success' && vars.BRIDGE_MAC_ONLY != 'true'
+        run: mv "unsigned/ReTV-Bridge-$VERSION-win-x64-setup.exe" "assets/ReTV-Bridge-$VERSION-win-x64-setup-UNSIGNED.exe"
+
+      - name: Check the asset list
+        run: |
+          base="ReTV-Bridge-$VERSION"
+          expected="$base-mac-universal.app.tar.gz
+          $base-mac-universal.app.tar.gz.sig
+          $base-mac-universal.dmg"
+          if [ "$MAC_ONLY" = true ]; then
+            :
+          elif [ "$SIGNED" = true ]; then
+            expected="$expected
+          $base-win-x64-setup.exe
+          $base-win-x64-setup.exe.sig"
+          else
+            expected="$expected
+          $base-win-x64-setup-UNSIGNED.exe"
+          fi
+          expected="$(printf '%s\n' "$expected" | sed 's/^ *//' | sort)"
+          actual="$(find assets -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)"
+          if [ "$expected" != "$actual" ]; then
+            printf 'expected:\n%s\nfound:\n%s\n' "$expected" "$actual" >&2
+            exit 1
+          fi
+          (cd assets && sha256sum -- *)
+
+      - name: Release notes
+        run: |
+          perl -MJSON::PP -e '
+            local $/; open(my $h, "<", $ARGV[0]) or die; my $n = JSON::PP->new->utf8->decode(<$h>);
+            binmode STDOUT, ":utf8";
+            if ($ARGV[4] eq "true") {
+              print "> [!NOTE]\n> Mac only: this release has no Windows build (BRIDGE_MAC_ONLY). ";
+              print "Stage it with scripts/release-retv-bridge.sh --mac-only; the site says the Windows version is coming.\n\n";
+            } elsif ($ARGV[2] ne "true") {
+              print "> [!WARNING]\n> The Windows installer in this draft is NOT code-signed (SignPath not set up yet). ";
+              print "The Windows half is internal beta only and is never staged on retv.app; ";
+              print "the Mac half may be staged with scripts/release-retv-bridge.sh --mac-only. Do not publish this draft.\n\n";
+            }
+            if ($ARGV[3] eq "unsigned") {
+              print "> [!NOTE]\n> The macOS build is ad-hoc signed and NOT notarized by Apple (no Apple Developer ID). ";
+              print "macOS asks once before the first start: on macOS 15 and newer System Settings \x{2192} Privacy & Security \x{2192} Open Anyway, ";
+              print "on older macOS Control-click the app \x{2192} Open. Updates are verified with the updater signature as usual.\n\n";
+            }
+            print "Draft for ReTV Bridge $ARGV[1]. Check the assets before they are staged on retv.app.\n\n";
+            for my $lang (qw(en ru)) { print "### $lang\n\n"; print "- $_\n" for @{$n->{$lang}}; print "\n" }
+          ' "release-notes/$VERSION.json" "$VERSION" "$SIGNED" "$MAC_ROUTE" "$MAC_ONLY" > "$RUNNER_TEMP/body.md"
+
+      # An unsigned Windows build is always a pre-release, and says so in its name.
+      # The unsigned Mac route is not: it is the chosen production path.
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          draft: true
+          prerelease: ${{ contains(needs.test.outputs.version, '-') || (needs.win-sign.result != 'success' && vars.BRIDGE_MAC_ONLY != 'true') }}
+          tag_name: ${{ github.ref_name }}
+          name: ReTV Bridge ${{ needs.test.outputs.version }}${{ vars.BRIDGE_MAC_ONLY == 'true' && ' (Mac only)' || (needs.win-sign.result != 'success' && ' (UNSIGNED Windows – internal beta)' || '') }}
+          body_path: ${{ runner.temp }}/body.md
+          files: assets/*
+          fail_on_unmatched_files: true

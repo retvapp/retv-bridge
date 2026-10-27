@@ -1,0 +1,22 @@
+{
+  "description": "installApk: bytes whose SHA-256 is not the pinned one are sha256-mismatch and never reach the TV.",
+  "adb": {
+    "devices": {
+      "192.168.1.5:5555": {
+        "model": "MiTV-AYFR0"
+      }
+    },
+    "http": {
+      "https://retv.app/downloads/retv-home-1.0.1-10001.apk": {
+        "status": 200,
+        "bodyHex": "504b030401020305"
+      }
+    }
+  },
+  "steps": [
+    {"open":{"origin":"https://retv.app","host":"$host"},"expectStatus":101},
+    {"send":{"id":1,"token":"$token","type":"connect","ip":"192.168.1.5","port":5555},"expect":{"id":1,"ok":true,"result":{"serial":"192.168.1.5:5555","model":"MiTV-AYFR0"}}},
+    {"send":{"id":2,"token":"$token","type":"installApk","serial":"192.168.1.5:5555","url":"https://retv.app/downloads/retv-home-1.0.1-10001.apk","sha256":"5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea"},"expect":{"id":2,"ok":false,"error":"sha256-mismatch"}},
+    {"expectAdb":{"pushed":{},"ran":[]}}
+  ]
+}

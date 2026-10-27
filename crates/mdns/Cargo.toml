@@ -1,0 +1,17 @@
+[package]
+name = "retv-bridge-mdns"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+retv-bridge-core = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+simple-dns = { workspace = true }
+if-addrs = { workspace = true }
+socket2 = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

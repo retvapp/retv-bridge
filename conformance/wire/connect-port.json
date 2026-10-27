@@ -1,0 +1,26 @@
+{
+  "description": "connect without a port takes the TV's connect port from mDNS (discover), else 5555; an explicit port wins; connecting the same serial again replaces (and closes) the old connection.",
+  "adb": {
+    "tvs": [
+      {"name": "adb-X", "ip": "192.168.1.7", "connectPort": 37123, "pairPort": 40111},
+      {"name": "adb-Y", "ip": "192.168.1.9", "connectPort": null, "pairPort": 40222}
+    ],
+    "devices": {
+      "192.168.1.7:37123": {"model": "Box S3"},
+      "192.168.1.7:5555": {"model": "Box S3 (5555)"},
+      "192.168.1.8:5555": {"model": "Mi TV Stick"},
+      "192.168.1.9:5555": {"model": "No connect port"}
+    }
+  },
+  "steps": [
+    {"open": {"origin": "http://127.0.0.1:5180", "host": "$host"}, "expectStatus": 101},
+    {"send": {"id": 1, "token": "$token", "type": "connect", "ip": "192.168.1.7"}, "expect": {"id": 1, "ok": true, "result": {"serial": "192.168.1.7:37123", "model": "Box S3"}}},
+    {"send": {"id": 2, "token": "$token", "type": "connect", "ip": "192.168.1.8"}, "expect": {"id": 2, "ok": true, "result": {"serial": "192.168.1.8:5555", "model": "Mi TV Stick"}}},
+    {"send": {"id": 3, "token": "$token", "type": "connect", "ip": "192.168.1.9", "port": null}, "expect": {"id": 3, "ok": true, "result": {"serial": "192.168.1.9:5555", "model": "No connect port"}}},
+    {"send": {"id": 4, "token": "$token", "type": "connect", "ip": "192.168.1.7", "port": 5555}, "expect": {"id": 4, "ok": true, "result": {"serial": "192.168.1.7:5555", "model": "Box S3 (5555)"}}},
+    {"send": {"id": 5, "token": "$token", "type": "connect", "ip": "192.168.1.8", "port": 5555}, "expect": {"id": 5, "ok": true, "result": {"serial": "192.168.1.8:5555", "model": "Mi TV Stick"}}},
+    {"expectAdb": {"connected": ["192.168.1.7:37123", "192.168.1.8:5555", "192.168.1.9:5555", "192.168.1.7:5555", "192.168.1.8:5555"], "closed": ["192.168.1.8:5555"]}},
+    {"close": true},
+    {"expectAdb": {"closed": ["192.168.1.7:37123", "192.168.1.7:5555", "192.168.1.8:5555", "192.168.1.8:5555", "192.168.1.9:5555"]}}
+  ]
+}

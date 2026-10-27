@@ -1,0 +1,46 @@
+{
+  "description": "installApk never follows a redirect, even to another allowed URL: any 3xx (a redirect with or without Location, 300, 304) is download-failed with no result. Any other HTTP status than 200 is download-failed with result.status; a URL that cannot be fetched at all is download-failed with no result. Nothing reaches the TV.",
+  "adb": {
+    "devices": {
+      "192.168.1.5:5555": {
+        "model": "MiTV-AYFR0"
+      }
+    },
+    "http": {
+      "https://retv.app/downloads/old.apk": {
+        "status": 302,
+        "redirect": "https://evil.example/x.apk"
+      },
+      "https://retv.app/downloads/moved.apk": {
+        "status": 301,
+        "redirect": "https://retv.app/downloads/retv-home-1.0.1-10001.apk"
+      },
+      "https://retv.app/downloads/choices.apk": {
+        "status": 300,
+        "bodyHex": "6e6f7065"
+      },
+      "https://retv.app/downloads/gone.apk": {
+        "status": 404,
+        "bodyHex": "6e6f7065"
+      },
+      "https://evil.example/x.apk": {
+        "status": 200,
+        "bodyHex": "504b030401020304"
+      },
+      "https://retv.app/downloads/retv-home-1.0.1-10001.apk": {
+        "status": 200,
+        "bodyHex": "504b030401020304"
+      }
+    }
+  },
+  "steps": [
+    {"open":{"origin":"https://retv.app","host":"$host"},"expectStatus":101},
+    {"send":{"id":1,"token":"$token","type":"connect","ip":"192.168.1.5","port":5555},"expect":{"id":1,"ok":true,"result":{"serial":"192.168.1.5:5555","model":"MiTV-AYFR0"}}},
+    {"send":{"id":2,"token":"$token","type":"installApk","serial":"192.168.1.5:5555","url":"https://retv.app/downloads/old.apk","sha256":"5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea"},"expect":{"id":2,"ok":false,"error":"download-failed"}},
+    {"send":{"id":3,"token":"$token","type":"installApk","serial":"192.168.1.5:5555","url":"https://retv.app/downloads/moved.apk","sha256":"5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea"},"expect":{"id":3,"ok":false,"error":"download-failed"}},
+    {"send":{"id":4,"token":"$token","type":"installApk","serial":"192.168.1.5:5555","url":"https://retv.app/downloads/gone.apk","sha256":"5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea"},"expect":{"id":4,"ok":false,"error":"download-failed","result":{"status":404}}},
+    {"send":{"id":5,"token":"$token","type":"installApk","serial":"192.168.1.5:5555","url":"https://retv.app/downloads/missing.apk","sha256":"5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea"},"expect":{"id":5,"ok":false,"error":"download-failed"}},
+    {"send":{"id":6,"token":"$token","type":"installApk","serial":"192.168.1.5:5555","url":"https://retv.app/downloads/choices.apk","sha256":"5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea"},"expect":{"id":6,"ok":false,"error":"download-failed"}},
+    {"expectAdb":{"pushed":{},"ran":[]}}
+  ]
+}

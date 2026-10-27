@@ -1,0 +1,8 @@
+{
+  "description": "Mi TV Stick 4K (Android TV 11, no Wireless debugging menu), USB debugging on, adbd on TCP 5555: the answer to a PTR query for _adb._tcp. The host is Android-3.local: mDNS renamed it because other boxes on the LAN already hold Android.local. Captured 2026-10-27; serial, IPv4 and IPv6 (EUI-64, carries the MAC) replaced byte-for-byte with neutral values of the same length.",
+  "from": "192.168.1.33",
+  "packetHex": "000084000000000100000006045f616462045f746370056c6f63616c00000c0001000011940018156164622d3030303030303030303030303030303030c00cc0270010800100001194000100c027002180010000007800120000000015b309416e64726f69642d33c016c05e00018001000000780004c0a80121c05e001c8001000000780010fe800000000000000000000000000002c027002f8001000011940009c02700050000800040c05e002f8001000000780008c05e000440000008",
+  "expect": [
+    {"instance": "adb-00000000000000000", "kind": "adb", "ip": "192.168.1.33", "port": 5555}
+  ]
+}

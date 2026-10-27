@@ -1,0 +1,24 @@
+{
+  "description": "Wrong codes report attemptsLeft; the fifth locks start and finish for 30 s with retryIn, on every socket; the socket stays open; after the lock a new code works.",
+  "pairCodes": ["482917", "135790"],
+  "steps": [
+    {"open": {"origin": "http://127.0.0.1:5180", "host": "$host"}, "expectStatus": 101},
+    {"send": {"id": 1, "type": "pairStart"}, "expect": {"id": 1, "ok": true, "result": {"expiresIn": 120}}},
+    {"send": {"id": 2, "type": "pairFinish", "code": "000000"}, "expect": {"id": 2, "ok": false, "error": "bad-code", "result": {"attemptsLeft": 4}}},
+    {"send": {"id": 3, "type": "pairFinish", "code": "000000"}, "expect": {"id": 3, "ok": false, "error": "bad-code", "result": {"attemptsLeft": 3}}},
+    {"send": {"id": 4, "type": "pairFinish", "code": "12345"}, "expect": {"id": 4, "ok": false, "error": "bad-code", "result": {"attemptsLeft": 2}}},
+    {"send": {"id": 5, "type": "pairFinish", "code": "000000"}, "expect": {"id": 5, "ok": false, "error": "bad-code", "result": {"attemptsLeft": 1}}},
+    {"send": {"id": 6, "type": "pairFinish", "code": "000000"}, "expect": {"id": 6, "ok": false, "error": "pair-locked", "result": {"retryIn": 30}}},
+    {"send": {"id": 7, "type": "pairFinish", "code": "482917"}, "expect": {"id": 7, "ok": false, "error": "pair-locked", "result": {"retryIn": 30}}},
+    {"send": {"id": 8, "type": "pairStart"}, "expect": {"id": 8, "ok": false, "error": "pair-locked", "result": {"retryIn": 30}}},
+    {"socket": 1, "open": {"origin": "http://127.0.0.1:5180", "host": "$host"}, "expectStatus": 101},
+    {"advanceMs": 20000},
+    {"socket": 1, "send": {"id": 1, "type": "pairStart"}, "expect": {"id": 1, "ok": false, "error": "pair-locked", "result": {"retryIn": 10}}},
+    {"advanceMs": 9999},
+    {"send": {"id": 9, "type": "pairStart"}, "expect": {"id": 9, "ok": false, "error": "pair-locked", "result": {"retryIn": 1}}},
+    {"advanceMs": 1},
+    {"send": {"id": 10, "type": "pairStart"}, "expect": {"id": 10, "ok": true, "result": {"expiresIn": 120}}},
+    {"send": {"id": 11, "type": "pairFinish", "code": "482917"}, "expect": {"id": 11, "ok": false, "error": "bad-code", "result": {"attemptsLeft": 4}}},
+    {"send": {"id": 12, "type": "pairFinish", "code": "135790"}, "expect": {"id": 12, "ok": true, "result": {"token": "$token"}}}
+  ]
+}

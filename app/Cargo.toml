@@ -1,0 +1,39 @@
+[package]
+name = "retv-bridge-app"
+description = "ReTV Bridge tray app (Tauri shell)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "retv_bridge_app"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "retv-bridge"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { workspace = true }
+
+[dependencies]
+retv-bridge-core = { workspace = true }
+retv-bridge-adb = { workspace = true }
+retv-bridge-mdns = { workspace = true }
+tauri = { workspace = true, features = ["tray-icon", "image-png"] }
+tauri-plugin-single-instance = { workspace = true }
+tauri-plugin-deep-link = { workspace = true }
+tauri-plugin-autostart = { workspace = true }
+tauri-plugin-notification = { workspace = true }
+tauri-plugin-opener = { workspace = true }
+tauri-plugin-dialog = { workspace = true }
+tauri-plugin-updater = { workspace = true }
+sys-locale = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+rand = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

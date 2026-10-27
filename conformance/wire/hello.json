@@ -1,0 +1,12 @@
+{
+  "description": "hello needs no token: without a valid one it answers paired:false and keeps the socket open. String ids are echoed.",
+  "steps": [
+    {"open": {"origin": "http://127.0.0.1:5180", "host": "$host"}, "expectStatus": 101},
+    {"send": {"id": 1, "type": "hello", "version": 1}, "expect": {"id": 1, "ok": true, "result": {"version": "$any", "protocol": 2, "features": ["installApk"], "adb": true, "paired": false}}},
+    {"send": {"id": 2, "token": "stale", "type": "hello"}, "expect": {"id": 2, "ok": true, "result": {"version": "$any", "protocol": 2, "features": ["installApk"], "adb": true, "paired": false}}},
+    {"send": {"id": 3, "token": "", "type": "hello"}, "expect": {"id": 3, "ok": true, "result": {"version": "$any", "protocol": 2, "features": ["installApk"], "adb": true, "paired": false}}},
+    {"send": {"id": 4, "token": 12345, "type": "hello"}, "expect": {"id": 4, "ok": true, "result": {"version": "$any", "protocol": 2, "features": ["installApk"], "adb": true, "paired": false}}},
+    {"send": {"id": "h-5", "token": "$token", "type": "hello"}, "expect": {"id": "h-5", "ok": true, "result": {"version": "$any", "protocol": 2, "features": ["installApk"], "adb": true, "paired": true}}},
+    {"send": {"id": 6, "token": "$token", "type": "discover"}, "expect": {"id": 6, "ok": true, "result": {"tvs": []}}}
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "description": "Malformed messages get bad-request (id -1 when there is no usable id) and the socket stays open. The id is checked before the token: an id-less message without a token is bad-request, not bad-token. Binary frames are never parsed, even if they hold JSON.",
+  "adb": {"devices": {"192.168.1.5:5555": {"model": "MiTV-AYFR0"}}},
+  "steps": [
+    {"open": {"origin": "http://127.0.0.1:5180", "host": "$host"}, "expectStatus": 101},
+    {"sendRaw": "{not json", "expect": {"id": -1, "ok": false, "error": "bad-request"}},
+    {"sendRaw": "[1, 2]", "expect": {"id": -1, "ok": false, "error": "bad-request"}},
+    {"sendRaw": "42", "expect": {"id": -1, "ok": false, "error": "bad-request"}},
+    {"send": {"token": "$token", "type": "hello"}, "expect": {"id": -1, "ok": false, "error": "bad-request"}},
+    {"send": {"type": "run", "serial": "192.168.1.5:5555", "cmd": "echo hi"}, "expect": {"id": -1, "ok": false, "error": "bad-request"}},
+    {"send": {"id": null, "token": "wrong", "type": "connect", "ip": "192.168.1.5", "port": 5555}, "expect": {"id": -1, "ok": false, "error": "bad-request"}},
+    {"sendBinary": "7b226964223a312c2274797065223a2268656c6c6f227d", "expect": {"id": -1, "ok": false, "error": "bad-request"}},
+    {"sendBinary": "00ff", "expect": {"id": -1, "ok": false, "error": "bad-request"}},
+    {"send": {"id": {"n": 1}, "token": "$token", "type": "hello"}, "expect": {"id": -1, "ok": false, "error": "bad-request"}},
+    {"send": {"id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "token": "$token", "type": "hello"}, "expect": {"id": -1, "ok": false, "error": "bad-request"}},
+    {"send": {"id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "token": "$token", "type": "discover"}, "expect": {"id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "ok": true, "result": {"tvs": []}}},
+    {"send": {"id": 1, "token": "$token", "type": "noSuchType"}, "expect": {"id": 1, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 2, "token": "$token", "type": "connect", "ip": "192.168.1.5", "port": 0}, "expect": {"id": 2, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 3, "token": "$token", "type": "connect", "ip": "192.168.1.5", "port": "5555"}, "expect": {"id": 3, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 4, "token": "$token", "type": "connect", "ip": "192.168.1.5", "port": 5555}, "expect": {"id": 4, "ok": true, "result": {"serial": "192.168.1.5:5555", "model": "MiTV-AYFR0"}}},
+    {"send": {"id": 5, "token": "$token", "type": "run", "serial": "192.168.1.5:5555", "cmd": ""}, "expect": {"id": 5, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 6, "token": "$token", "type": "run", "serial": "192.168.1.5:5555"}, "expect": {"id": 6, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 7, "token": "$token", "type": "writeFile", "serial": "192.168.1.5:5555", "path": "/sdcard/ReTV/a.json", "data": 5}, "expect": {"id": 7, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 8, "token": "$token", "type": "hello"}, "expect": {"id": 8, "ok": true, "result": {"version": "$any", "protocol": 2, "features": ["installApk"], "adb": true, "paired": true}}},
+    {"expectAdb": {"ran": [], "pushed": {}}}
+  ]
+}

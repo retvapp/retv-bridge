@@ -1,0 +1,26 @@
+{
+  "description": "disconnect closes a device and forgets its serial; closing the socket closes every device it still holds.",
+  "adb": {
+    "devices": {
+      "192.168.1.5:5555": {"model": "TV five"},
+      "192.168.1.6:5555": {"model": "TV six"},
+      "192.168.1.7:5555": {"model": "TV seven"}
+    }
+  },
+  "steps": [
+    {"open": {"origin": "http://127.0.0.1:5180", "host": "$host"}, "expectStatus": 101},
+    {"send": {"id": 1, "token": "$token", "type": "connect", "ip": "192.168.1.5", "port": 5555}, "expect": {"id": 1, "ok": true, "result": {"serial": "192.168.1.5:5555", "model": "TV five"}}},
+    {"send": {"id": 2, "token": "$token", "type": "connect", "ip": "192.168.1.6", "port": 5555}, "expect": {"id": 2, "ok": true, "result": {"serial": "192.168.1.6:5555", "model": "TV six"}}},
+    {"send": {"id": 3, "token": "$token", "type": "disconnect", "serial": "192.168.1.5:5555"}, "expect": {"id": 3, "ok": true, "result": {}}},
+    {"expectAdb": {"closed": ["192.168.1.5:5555"]}},
+    {"send": {"id": 4, "token": "$token", "type": "run", "serial": "192.168.1.5:5555", "cmd": "echo hi"}, "expect": {"id": 4, "ok": false, "error": "unknown-serial"}},
+    {"send": {"id": 5, "token": "$token", "type": "disconnect", "serial": "192.168.1.5:5555"}, "expect": {"id": 5, "ok": false, "error": "unknown-serial"}},
+    {"socket": 1, "open": {"origin": "https://retv.app", "host": "$host"}, "expectStatus": 101},
+    {"socket": 1, "send": {"id": 1, "token": "$token", "type": "connect", "ip": "192.168.1.7", "port": 5555}, "expect": {"id": 1, "ok": true, "result": {"serial": "192.168.1.7:5555", "model": "TV seven"}}},
+    {"close": true},
+    {"expectAdb": {"closed": ["192.168.1.5:5555", "192.168.1.6:5555"]}},
+    {"socket": 1, "send": {"id": 2, "token": "$token", "type": "run", "serial": "192.168.1.7:5555", "cmd": "true"}, "expect": {"id": 2, "ok": true, "result": {"exitCode": 127, "stdout": "", "stderr": ""}}},
+    {"socket": 1, "close": true},
+    {"expectAdb": {"closed": ["192.168.1.5:5555", "192.168.1.6:5555", "192.168.1.7:5555"]}}
+  ]
+}

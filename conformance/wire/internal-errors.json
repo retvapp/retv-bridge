@@ -1,0 +1,27 @@
+{
+  "description": "An adb failure that is not a transport code is answered exactly internal: device paths, stderr and other error text stay in the bridge's own log and never reach the site. Transport codes still pass through.",
+  "adb": {
+    "devices": {
+      "192.168.1.20:5555": {"connectError": "adb: failed to stat /sdcard/secret.txt: Permission denied"},
+      "192.168.1.21:5555": {"connectError": "Error: read ECONNRESET\n    at TCP.onStreamRead (node:internal/stream_base_commons:216:20)"},
+      "192.168.1.22:5555": {"connectError": "unauthorized: ~/.android/adbkey"},
+      "192.168.1.5:5555": {
+        "model": "MiTV-AYFR0",
+        "shell": {
+          "cat /data/secret": {"error": "sh: /data/secret: Permission denied"},
+          "sleep 999": {"error": "connection-lost"}
+        }
+      }
+    }
+  },
+  "steps": [
+    {"open": {"origin": "http://127.0.0.1:5180", "host": "$host"}, "expectStatus": 101},
+    {"send": {"id": 1, "token": "$token", "type": "connect", "ip": "192.168.1.20", "port": 5555}, "expect": {"id": 1, "ok": false, "error": "internal"}},
+    {"send": {"id": 2, "token": "$token", "type": "connect", "ip": "192.168.1.21", "port": 5555}, "expect": {"id": 2, "ok": false, "error": "internal"}},
+    {"send": {"id": 3, "token": "$token", "type": "connect", "ip": "192.168.1.22", "port": 5555}, "expect": {"id": 3, "ok": false, "error": "internal"}},
+    {"send": {"id": 4, "token": "$token", "type": "connect", "ip": "192.168.1.5", "port": 5555}, "expect": {"id": 4, "ok": true, "result": {"serial": "192.168.1.5:5555", "model": "MiTV-AYFR0"}}},
+    {"send": {"id": 5, "token": "$token", "type": "run", "serial": "192.168.1.5:5555", "cmd": "cat /data/secret"}, "expect": {"id": 5, "ok": false, "error": "internal"}},
+    {"send": {"id": 6, "token": "$token", "type": "run", "serial": "192.168.1.5:5555", "cmd": "sleep 999"}, "expect": {"id": 6, "ok": false, "error": "connection-lost"}},
+    {"expectAdb": {"connected": ["192.168.1.5:5555"], "ran": [["192.168.1.5:5555", "cat /data/secret"], ["192.168.1.5:5555", "sleep 999"]]}}
+  ]
+}
