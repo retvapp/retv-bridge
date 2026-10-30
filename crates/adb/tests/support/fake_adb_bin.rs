@@ -50,13 +50,21 @@ pub fn port_is_free(port: u16) -> bool {
 /// this never holds the port itself, even for a moment (a bound socket is
 /// inherited by any process another test forks meanwhile, and the server
 /// test then finds its port taken).
+///
+/// The refusal is instant on Linux and macOS but takes about 2 s on Windows
+/// (it retries the SYN after the RST; see `PROBE_TIMEOUT` in server_proc.rs),
+/// so the timeout leaves room for that: with a 2 s one, a free port on Windows
+/// mostly timed out instead and counted as taken.
 pub fn port_refuses(port: u16) -> bool {
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
     matches!(
-        std::net::TcpStream::connect_timeout(&addr, Duration::from_secs(2)),
+        std::net::TcpStream::connect_timeout(&addr, REFUSE_WITHIN),
         Err(e) if e.kind() == std::io::ErrorKind::ConnectionRefused
     )
 }
+
+/// Longer than a refused loopback connect takes on any OS (Windows: ~2 s).
+const REFUSE_WITHIN: Duration = Duration::from_secs(10);
 
 /// Lowest test port. Ports from here to `PORT_END` are below every OS's
 /// ephemeral range (Linux 32768+, macOS and Windows 49152+), so neither a
@@ -102,10 +110,11 @@ pub fn test_port() -> u16 {
     panic!("no free test port in {PORT_BASE}..{PORT_END}");
 }
 
-/// Waits (up to 5 s) for `port` to be free: `kill-server` returns once the
-/// server has acknowledged, which is a moment before its process is gone.
+/// Waits (up to 15 s, room for a few ~2 s probes on Windows) for `port` to be
+/// free: `kill-server` returns once the server has acknowledged, which is a
+/// moment before its process is gone.
 pub fn wait_port_free(port: u16) -> bool {
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + Duration::from_secs(15);
     while !port_refuses(port) {
         if Instant::now() > deadline {
             return false;
