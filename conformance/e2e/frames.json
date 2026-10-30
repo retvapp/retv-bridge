@@ -1,0 +1,304 @@
+{
+  "description": "ReTV Helper E2E frames for the handshake.json cases: the first three each way, then frame sequences a receiver must refuse. See ../README.md, section e2e.",
+  "cases": [
+    {
+      "name": "qr",
+      "ctlToTv": [
+        {
+          "plainUtf8": "{\"t\":\"confirm\"}",
+          "frameHex": "00000000000000009d0e75b9d51960e69738538958d4b36a93accfd7124eed0641c1aa9c923d48"
+        },
+        {
+          "plainUtf8": "{\"id\":1,\"m\":\"helperInfo\"}",
+          "frameHex": "000000000000000116b4059477f3e5fb5420ec1bdb9a806f5b11dca3e2fc9ab19d83c88a337bfd1c4168f4cb4e65a34abf"
+        },
+        {
+          "plainUtf8": "{\"id\":2,\"m\":\"run\",\"cmd\":\"getprop ro.product.model\"}",
+          "frameHex": "0000000000000002b4f55b95832e0cf533e9f8cad7b3e8140af26294ba1f7b847f23870bdcbe41765aa85e898a188e3b56e10b321895d30acf2ac7fa683799337b628bb8f401537ea16099"
+        }
+      ],
+      "tvToCtl": [
+        {
+          "plainUtf8": "{\"t\":\"confirm\",\"next\":\"MDEyMzQ1Njc4OTo7PD0-Pw\"}",
+          "frameHex": "0000000000000000702dd1263a7574e3862c52a45c9dda9c0c92879ac6b700c33e7ab28dc99dd89859eaa354416864f041a95018f6ac27e39314f3e3526d89afe11ba527af55ea"
+        },
+        {
+          "plainUtf8": "{\"id\":1,\"ok\":true}",
+          "frameHex": "00000000000000014da0672bb4ab8f7a72ad1a1cb828e07265f3d84d542f3064cc0ed160907387f1c5ed"
+        },
+        {
+          "plainUtf8": "{\"id\":2,\"ok\":true,\"out\":\"MiTV-AYFR0\\n\"}",
+          "frameHex": "0000000000000002596500a20eec48946aff1e7d70969c80c6142c4bcde7ce326f32ad56566e28f2b7c5d74bbdf8f2f401ba520fa5779b8551312f03c21b9d"
+        }
+      ]
+    },
+    {
+      "name": "code",
+      "ctlToTv": [
+        {
+          "plainUtf8": "{\"t\":\"confirm\"}",
+          "frameHex": "0000000000000000d47cb91f4a85de5850809989528f0f5519c9bdce882c5753d21389670589dc"
+        },
+        {
+          "plainUtf8": "{\"id\":1,\"m\":\"helperInfo\"}",
+          "frameHex": "0000000000000001d6dd0d7e8d1b2d3632d0de048f3e3dd9e3de677b0a6616f0407183334a1fbdfb8111e11f5f6b8679fc"
+        },
+        {
+          "plainUtf8": "{\"id\":2,\"m\":\"run\",\"cmd\":\"getprop ro.product.model\"}",
+          "frameHex": "00000000000000027fc6872baae08228cdd7cbd8a8c170b0f3988c09c5bbcf85f5e1bc32ec6a13dba9204b37844c8d0afde7fe753ba02ce0b13bef64fa68deacbbefcf35bfbd834270f84a"
+        }
+      ],
+      "tvToCtl": [
+        {
+          "plainUtf8": "{\"t\":\"confirm\",\"next\":\"MDEyMzQ1Njc4OTo7PD0-Pw\"}",
+          "frameHex": "00000000000000002ec8c654efba6ae51250ee3c03838732c058c57169243c5f79e574f1aba67d704c7d41e09dc633b8d595a8e97a230227a0b5ec3b80db2ae19653ac6fa4da06"
+        },
+        {
+          "plainUtf8": "{\"id\":1,\"ok\":true}",
+          "frameHex": "000000000000000137d48f06093c4d7cb91f093c61b2983890ebb0b551971248a67844022723097a1eec"
+        },
+        {
+          "plainUtf8": "{\"id\":2,\"ok\":true,\"out\":\"MiTV-AYFR0\\n\"}",
+          "frameHex": "0000000000000002412c7e795c611263a0eb8feeec347f9c84aceabefb7d3cf9317ae143b4bffbb031b543a8c5f2068c1112c73412a2d7bd15dcb348e16231"
+        }
+      ]
+    }
+  ],
+  "reject": [
+    {
+      "name": "replay",
+      "case": "qr",
+      "dir": "ctlToTv",
+      "steps": [
+        {
+          "frameHex": "00000000000000009d0e75b9d51960e69738538958d4b36a93accfd7124eed0641c1aa9c923d48",
+          "ok": true
+        },
+        {
+          "frameHex": "00000000000000009d0e75b9d51960e69738538958d4b36a93accfd7124eed0641c1aa9c923d48",
+          "ok": false
+        }
+      ]
+    },
+    {
+      "name": "gap",
+      "case": "qr",
+      "dir": "ctlToTv",
+      "steps": [
+        {
+          "frameHex": "000000000000000116b4059477f3e5fb5420ec1bdb9a806f5b11dca3e2fc9ab19d83c88a337bfd1c4168f4cb4e65a34abf",
+          "ok": false
+        }
+      ]
+    },
+    {
+      "name": "reorder",
+      "case": "qr",
+      "dir": "tvToCtl",
+      "steps": [
+        {
+          "frameHex": "0000000000000000702dd1263a7574e3862c52a45c9dda9c0c92879ac6b700c33e7ab28dc99dd89859eaa354416864f041a95018f6ac27e39314f3e3526d89afe11ba527af55ea",
+          "ok": true
+        },
+        {
+          "frameHex": "0000000000000002596500a20eec48946aff1e7d70969c80c6142c4bcde7ce326f32ad56566e28f2b7c5d74bbdf8f2f401ba520fa5779b8551312f03c21b9d",
+          "ok": false
+        }
+      ]
+    },
+    {
+      "name": "ciphertext-bit-flip",
+      "case": "qr",
+      "dir": "ctlToTv",
+      "steps": [
+        {
+          "frameHex": "00000000000000009c0e75b9d51960e69738538958d4b36a93accfd7124eed0641c1aa9c923d48",
+          "ok": false
+        }
+      ]
+    },
+    {
+      "name": "tag-bit-flip",
+      "case": "qr",
+      "dir": "tvToCtl",
+      "steps": [
+        {
+          "frameHex": "0000000000000000702dd1263a7574e3862c52a45c9dda9c0c92879ac6b700c33e7ab28dc99dd89859eaa354416864f041a95018f6ac27e39314f3e3526d89afe11ba527af55eb",
+          "ok": false
+        }
+      ]
+    },
+    {
+      "name": "counter-bit-flip",
+      "case": "qr",
+      "dir": "ctlToTv",
+      "steps": [
+        {
+          "frameHex": "00000000000000009d0e75b9d51960e69738538958d4b36a93accfd7124eed0641c1aa9c923d48",
+          "ok": true
+        },
+        {
+          "frameHex": "000000000000000016b4059477f3e5fb5420ec1bdb9a806f5b11dca3e2fc9ab19d83c88a337bfd1c4168f4cb4e65a34abf",
+          "ok": false
+        }
+      ]
+    },
+    {
+      "name": "reflected",
+      "case": "qr",
+      "dir": "tvToCtl",
+      "steps": [
+        {
+          "frameHex": "00000000000000009d0e75b9d51960e69738538958d4b36a93accfd7124eed0641c1aa9c923d48",
+          "ok": false
+        }
+      ]
+    },
+    {
+      "name": "qr-frame-in-code-session",
+      "case": "code",
+      "dir": "ctlToTv",
+      "steps": [
+        {
+          "frameHex": "00000000000000009d0e75b9d51960e69738538958d4b36a93accfd7124eed0641c1aa9c923d48",
+          "ok": false
+        }
+      ]
+    },
+    {
+      "name": "truncated",
+      "case": "qr",
+      "dir": "ctlToTv",
+      "steps": [
+        {
+          "frameHex": "00000000000000009d0e75b9d51960e69738538958d4b3",
+          "ok": false
+        }
+      ]
+    },
+    {
+      "name": "latch-after-gap",
+      "case": "qr",
+      "dir": "ctlToTv",
+      "steps": [
+        {
+          "frameHex": "000000000000000116b4059477f3e5fb5420ec1bdb9a806f5b11dca3e2fc9ab19d83c88a337bfd1c4168f4cb4e65a34abf",
+          "ok": false
+        },
+        {
+          "frameHex": "00000000000000009d0e75b9d51960e69738538958d4b36a93accfd7124eed0641c1aa9c923d48",
+          "ok": false
+        },
+        {
+          "frameHex": "000000000000000116b4059477f3e5fb5420ec1bdb9a806f5b11dca3e2fc9ab19d83c88a337bfd1c4168f4cb4e65a34abf",
+          "ok": false
+        }
+      ]
+    },
+    {
+      "name": "latch-after-bit-flip",
+      "case": "qr",
+      "dir": "tvToCtl",
+      "steps": [
+        {
+          "frameHex": "0000000000000000702dd1263a7574e3862c52a45c9dda9c0c92879ac6b700c33e7ab28dc99dd89859eaa354416864f041a95018f6ac27e39314f3e3526d89afe11ba527af55ea",
+          "ok": true
+        },
+        {
+          "frameHex": "00000000000000014da1672bb4ab8f7a72ad1a1cb828e07265f3d84d542f3064cc0ed160907387f1c5ed",
+          "ok": false
+        },
+        {
+          "frameHex": "00000000000000014da0672bb4ab8f7a72ad1a1cb828e07265f3d84d542f3064cc0ed160907387f1c5ed",
+          "ok": false
+        }
+      ]
+    }
+  ],
+  "confirm": {
+    "accept": [
+      {
+        "from": "ctl",
+        "plainUtf8": "{\"t\":\"confirm\"}",
+        "nextHex": null
+      },
+      {
+        "from": "tv",
+        "plainUtf8": "{\"t\":\"confirm\",\"next\":\"MDEyMzQ1Njc4OTo7PD0-Pw\"}",
+        "nextHex": "303132333435363738393a3b3c3d3e3f"
+      }
+    ],
+    "reject": [
+      {
+        "name": "ctl-with-next",
+        "from": "ctl",
+        "plainHex": "7b2274223a22636f6e6669726d222c226e657874223a224d4445794d7a51314e6a63344f546f375044302d5077227d"
+      },
+      {
+        "name": "ctl-extra-key",
+        "from": "ctl",
+        "plainHex": "7b2274223a22636f6e6669726d222c2278223a317d"
+      },
+      {
+        "name": "ctl-wrong-t",
+        "from": "ctl",
+        "plainHex": "7b2274223a22436f6e6669726d227d"
+      },
+      {
+        "name": "tv-without-next",
+        "from": "tv",
+        "plainHex": "7b2274223a22636f6e6669726d227d"
+      },
+      {
+        "name": "tv-extra-key",
+        "from": "tv",
+        "plainHex": "7b2274223a22636f6e6669726d222c226e657874223a224d4445794d7a51314e6a63344f546f375044302d5077222c2276223a317d"
+      },
+      {
+        "name": "tv-next-21-chars",
+        "from": "tv",
+        "plainHex": "7b2274223a22636f6e6669726d222c226e657874223a224d4445794d7a51314e6a63344f546f375044302d50227d"
+      },
+      {
+        "name": "tv-next-23-chars",
+        "from": "tv",
+        "plainHex": "7b2274223a22636f6e6669726d222c226e657874223a224d4445794d7a51314e6a63344f546f375044302d507741227d"
+      },
+      {
+        "name": "tv-next-padded",
+        "from": "tv",
+        "plainHex": "7b2274223a22636f6e6669726d222c226e657874223a224d4445794d7a51314e6a63344f546f375044302d50773d3d227d"
+      },
+      {
+        "name": "tv-next-non-canonical",
+        "from": "tv",
+        "plainHex": "7b2274223a22636f6e6669726d222c226e657874223a224d4445794d7a51314e6a63344f546f375044302d5078227d"
+      },
+      {
+        "name": "tv-next-standard-base64",
+        "from": "tv",
+        "plainHex": "7b2274223a22636f6e6669726d222c226e657874223a224d4445794d7a51314e6a63344f546f375044302b5077227d"
+      },
+      {
+        "name": "tv-next-not-string",
+        "from": "tv",
+        "plainHex": "7b2274223a22636f6e6669726d222c226e657874223a31367d"
+      },
+      {
+        "name": "not-json",
+        "from": "tv",
+        "plainHex": "636f6e6669726d"
+      },
+      {
+        "name": "array",
+        "from": "ctl",
+        "plainHex": "5b22636f6e6669726d225d"
+      },
+      {
+        "name": "not-utf8",
+        "from": "ctl",
+        "plainHex": "7b2274223a22ff227d"
+      }
+    ]
+  }
+}

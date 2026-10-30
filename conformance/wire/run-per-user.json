@@ -1,0 +1,30 @@
+{
+  "profiles": ["bridge"],
+  "description": "Android users go through run (Google TV profiles are Android users): the bridge neither adds, removes nor rewrites --user, and returns pm's answer unchanged. A SecurityException on stderr with exit 255 is an ordinary run result (ok: true), not a bridge error.",
+  "adb": {
+    "devices": {
+      "192.168.1.5:5555": {
+        "model": "MiTV-AYFR0",
+        "shell": {
+          "pm disable-user --user 10 com.mitv.tvhome.michannel": {"stdout": "Package com.mitv.tvhome.michannel new state: disabled-user\n", "stderr": "", "exitCode": 0},
+          "pm list packages -d --user 10": {"stdout": "package:com.mitv.tvhome.michannel\n", "stderr": "", "exitCode": 0},
+          "pm enable --user 11 com.x.y": {"stdout": "", "stderr": "Exception occurred while executing: java.lang.SecurityException: Shell does not have permission to access user 11\n", "exitCode": 255}
+        }
+      }
+    }
+  },
+  "steps": [
+    {"open": {"origin": "http://127.0.0.1:5180", "host": "$host"}, "expectStatus": 101},
+    {"send": {"id": 1, "token": "$token", "type": "connect", "ip": "192.168.1.5"}, "expect": {"id": 1, "ok": true, "result": {"serial": "192.168.1.5:5555", "model": "MiTV-AYFR0"}}},
+    {"send": {"id": 2, "token": "$token", "type": "run", "serial": "192.168.1.5:5555", "cmd": "pm disable-user --user 10 com.mitv.tvhome.michannel"}, "expect": {"id": 2, "ok": true, "result": {"exitCode": 0, "stdout": "Package com.mitv.tvhome.michannel new state: disabled-user\n", "stderr": ""}}},
+    {"send": {"id": 3, "token": "$token", "type": "run", "serial": "192.168.1.5:5555", "cmd": "pm list packages -d --user 10"}, "expect": {"id": 3, "ok": true, "result": {"exitCode": 0, "stdout": "package:com.mitv.tvhome.michannel\n", "stderr": ""}}},
+    {"send": {"id": 4, "token": "$token", "type": "run", "serial": "192.168.1.5:5555", "cmd": "pm enable --user 11 com.x.y"}, "expect": {"id": 4, "ok": true, "result": {"exitCode": 255, "stdout": "", "stderr": "Exception occurred while executing: java.lang.SecurityException: Shell does not have permission to access user 11\n"}}},
+    {"expectAdb": {
+      "ran": [
+        ["192.168.1.5:5555", "pm disable-user --user 10 com.mitv.tvhome.michannel"],
+        ["192.168.1.5:5555", "pm list packages -d --user 10"],
+        ["192.168.1.5:5555", "pm enable --user 11 com.x.y"]
+      ]
+    }}
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "profiles": ["helper"],
+  "description": "Helper profile: discover lists only the TV itself, and connect reaches only 127.0.0.1 (no port), as serial self. Any other ip (or none) is ip-not-allowed, checked first; before adbStart the TV is adb-not-ready. run, disconnect and a second connect then work as on the bridge.",
+  "adb": {
+    "devices": {"self": {"model": "MiTV-AYFR0", "shell": {"getprop ro.build.version.sdk": {"stdout": "30\n", "stderr": "", "exitCode": 0}}}},
+    "helper": {"sdk": 30, "release": "11", "classicPort": true, "rsa": "allow"}
+  },
+  "steps": [
+    {"send": {"id": 1, "type": "discover"}, "expect": {"id": 1, "ok": true, "result": {"tvs": [{"name": "MiTV-AYFR0", "ip": "127.0.0.1", "connectPort": null, "pairPort": null}]}}},
+    {"send": {"id": 2, "type": "connect", "ip": "127.0.0.1"}, "expect": {"id": 2, "ok": false, "error": "adb-not-ready"}},
+    {"send": {"id": 3, "type": "connect", "ip": "192.168.1.5"}, "expect": {"id": 3, "ok": false, "error": "ip-not-allowed"}},
+    {"send": {"id": 4, "type": "adbStart", "method": "classic"}, "expect": {"id": 4, "ok": true, "result": {"method": "classic"}}},
+    {"send": {"id": 5, "type": "connect", "ip": "192.168.1.5"}, "expect": {"id": 5, "ok": false, "error": "ip-not-allowed"}},
+    {"send": {"id": 6, "type": "connect", "ip": "localhost"}, "expect": {"id": 6, "ok": false, "error": "ip-not-allowed"}},
+    {"send": {"id": 7, "type": "connect", "ip": "127.0.0.2"}, "expect": {"id": 7, "ok": false, "error": "ip-not-allowed"}},
+    {"send": {"id": 8, "type": "connect"}, "expect": {"id": 8, "ok": false, "error": "ip-not-allowed"}},
+    {"send": {"id": 9, "type": "connect", "ip": "127.0.0.1"}, "expect": {"id": 9, "ok": true, "result": {"serial": "self", "model": "MiTV-AYFR0"}}},
+    {"send": {"id": 10, "type": "run", "serial": "self", "cmd": "getprop ro.build.version.sdk"}, "expect": {"id": 10, "ok": true, "result": {"exitCode": 0, "stdout": "30\n", "stderr": ""}}},
+    {"send": {"id": 11, "type": "run", "serial": "127.0.0.1:5555", "cmd": "getprop ro.build.version.sdk"}, "expect": {"id": 11, "ok": false, "error": "unknown-serial"}},
+    {"send": {"id": 12, "type": "disconnect", "serial": "self"}, "expect": {"id": 12, "ok": true, "result": {}}},
+    {"send": {"id": 13, "type": "run", "serial": "self", "cmd": "getprop ro.build.version.sdk"}, "expect": {"id": 13, "ok": false, "error": "unknown-serial"}},
+    {"send": {"id": 14, "type": "connect", "ip": "127.0.0.1"}, "expect": {"id": 14, "ok": true, "result": {"serial": "self", "model": "MiTV-AYFR0"}}},
+    {"send": {"id": 15, "type": "discover"}, "expect": {"id": 15, "ok": true, "result": {"tvs": [{"name": "MiTV-AYFR0", "ip": "127.0.0.1", "connectPort": null, "pairPort": null}]}}},
+    {"expectAdb": {"connected": ["self", "self"], "closed": ["self"], "ran": [["self", "getprop ro.build.version.sdk"]], "pushed": {}}}
+  ]
+}

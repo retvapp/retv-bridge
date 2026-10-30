@@ -1,13 +1,14 @@
 {
+  "profiles": ["bridge"],
   "description": "connect opens the TV and reports its model (ro.product.model, or an empty string when unknown); run returns exitCode, stdout and stderr unchanged, including a failing command.",
   "adb": {
     "devices": {
       "192.168.1.5:41000": {
         "model": "MiTV-AYFR0",
         "shell": {
-          "echo hi": {"stdout": "hi\n", "stderr": "", "exitCode": 0},
-          "false": {"stdout": "", "stderr": "nope", "exitCode": 1},
-          "printf 'a\\tb\\u00e9'": {"stdout": "a\tbé", "stderr": "", "exitCode": 0}
+          "getprop sys.boot_completed": {"stdout": "1\n", "stderr": "", "exitCode": 0},
+          "pm path com.example.missing": {"stdout": "", "stderr": "nope", "exitCode": 1},
+          "getprop ro.build.fingerprint": {"stdout": "a\tbé", "stderr": "", "exitCode": 0}
         }
       },
       "10.0.0.7:5555": {}
@@ -16,18 +17,18 @@
   "steps": [
     {"open": {"origin": "http://127.0.0.1:5180", "host": "$host"}, "expectStatus": 101},
     {"send": {"id": 1, "token": "$token", "type": "connect", "ip": "192.168.1.5", "port": 41000}, "expect": {"id": 1, "ok": true, "result": {"serial": "192.168.1.5:41000", "model": "MiTV-AYFR0"}}},
-    {"send": {"id": 2, "token": "$token", "type": "run", "serial": "192.168.1.5:41000", "cmd": "echo hi"}, "expect": {"id": 2, "ok": true, "result": {"exitCode": 0, "stdout": "hi\n", "stderr": ""}}},
-    {"send": {"id": 3, "token": "$token", "type": "run", "serial": "192.168.1.5:41000", "cmd": "false"}, "expect": {"id": 3, "ok": true, "result": {"exitCode": 1, "stdout": "", "stderr": "nope"}}},
-    {"send": {"id": 4, "token": "$token", "type": "run", "serial": "192.168.1.5:41000", "cmd": "printf 'a\\tb\\u00e9'"}, "expect": {"id": 4, "ok": true, "result": {"exitCode": 0, "stdout": "a\tbé", "stderr": ""}}},
-    {"send": {"id": 5, "token": "$token", "type": "run", "serial": "192.168.1.5:41000", "cmd": "no-such-cmd"}, "expect": {"id": 5, "ok": true, "result": {"exitCode": 127, "stdout": "", "stderr": ""}}},
+    {"send": {"id": 2, "token": "$token", "type": "run", "serial": "192.168.1.5:41000", "cmd": "getprop sys.boot_completed"}, "expect": {"id": 2, "ok": true, "result": {"exitCode": 0, "stdout": "1\n", "stderr": ""}}},
+    {"send": {"id": 3, "token": "$token", "type": "run", "serial": "192.168.1.5:41000", "cmd": "pm path com.example.missing"}, "expect": {"id": 3, "ok": true, "result": {"exitCode": 1, "stdout": "", "stderr": "nope"}}},
+    {"send": {"id": 4, "token": "$token", "type": "run", "serial": "192.168.1.5:41000", "cmd": "getprop ro.build.fingerprint"}, "expect": {"id": 4, "ok": true, "result": {"exitCode": 0, "stdout": "a\tbé", "stderr": ""}}},
+    {"send": {"id": 5, "token": "$token", "type": "run", "serial": "192.168.1.5:41000", "cmd": "dumpsys wifi"}, "expect": {"id": 5, "ok": true, "result": {"exitCode": 127, "stdout": "", "stderr": ""}}},
     {"send": {"id": 6, "token": "$token", "type": "connect", "ip": "10.0.0.7"}, "expect": {"id": 6, "ok": true, "result": {"serial": "10.0.0.7:5555", "model": ""}}},
     {"expectAdb": {
       "connected": ["192.168.1.5:41000", "10.0.0.7:5555"],
       "ran": [
-        ["192.168.1.5:41000", "echo hi"],
-        ["192.168.1.5:41000", "false"],
-        ["192.168.1.5:41000", "printf 'a\\tb\\u00e9'"],
-        ["192.168.1.5:41000", "no-such-cmd"]
+        ["192.168.1.5:41000", "getprop sys.boot_completed"],
+        ["192.168.1.5:41000", "pm path com.example.missing"],
+        ["192.168.1.5:41000", "getprop ro.build.fingerprint"],
+        ["192.168.1.5:41000", "dumpsys wifi"]
       ],
       "closed": []
     }}

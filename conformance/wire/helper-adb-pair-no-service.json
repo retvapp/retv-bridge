@@ -1,0 +1,13 @@
+{
+  "profiles": ["helper"],
+  "description": "Helper profile: with no _adb-tls-pairing service within 5 s (the TV's pairing dialog is not open) adbPair is no-pairing-service. The code's format is checked first.",
+  "adb": {
+    "devices": {"self": {"model": "Chromecast"}},
+    "helper": {"sdk": 34, "release": "14", "classicPort": false, "pairingService": false, "wirelessConnect": true, "wirelessPaired": false}
+  },
+  "steps": [
+    {"send": {"id": 1, "type": "adbPair", "code": "12345"}, "expect": {"id": 1, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 2, "type": "adbPair", "code": "123456"}, "expect": {"id": 2, "ok": false, "error": "no-pairing-service"}},
+    {"expectAdb": {"paired": []}}
+  ]
+}

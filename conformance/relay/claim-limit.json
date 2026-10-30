@@ -1,0 +1,23 @@
+{
+  "description": "A TV (its ipKey) may claim at most 10 link codes per sliding 10 min (each «Нет камеры? Показать код» or «Новый код» is one); a refused claim is not counted. Other IPs are not affected.",
+  "steps": [
+    {"at":0,"op":"claimAllowed","ip":"198.51.100.7","expect":true},
+    {"at":1,"op":"claimAllowed","ip":"198.51.100.7","expect":true},
+    {"at":2,"op":"claimAllowed","ip":"198.51.100.7","expect":true},
+    {"at":3,"op":"claimAllowed","ip":"198.51.100.7","expect":true},
+    {"at":4,"op":"claimAllowed","ip":"198.51.100.7","expect":true},
+    {"at":5,"op":"claimAllowed","ip":"198.51.100.7","expect":true},
+    {"at":6,"op":"claimAllowed","ip":"198.51.100.7","expect":true},
+    {"at":7,"op":"claimAllowed","ip":"198.51.100.7","expect":true},
+    {"at":8,"op":"claimAllowed","ip":"198.51.100.7","expect":true},
+    {"at":9,"op":"claimAllowed","ip":"198.51.100.7","expect":true},
+    {"at":10,"op":"claimAllowed","ip":"198.51.100.7","expect":false},
+    {"at":10,"op":"claimAllowed","ip":"198.51.100.8","expect":true},
+    {"at":599999,"op":"claimAllowed","ip":"198.51.100.7","expect":false},
+    {"at":600000,"op":"claimAllowed","ip":"198.51.100.7","expect":true},
+    {"at":600000,"op":"claimAllowed","ip":"198.51.100.7","expect":false},
+    {"at":600001,"op":"sweep","expect":{"expired":[]}},
+    {"at":600001,"op":"claimAllowed","ip":"198.51.100.7","expect":true},
+    {"at":600001,"op":"claimAllowed","ip":"198.51.100.7","expect":false}
+  ]
+}

@@ -8,6 +8,21 @@ permissions:
   contents: read
 
 jobs:
+  # RustSec advisories for Cargo.lock. Warnings fail the job too; the Linux-only ones are ignored, each with its
+  # reason, in .cargo/audit.toml.
+  audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+        with:
+          tool: cargo-audit
+
+      - name: Audit dependencies
+        run: cargo audit --deny warnings
+
   test:
     name: test (${{ matrix.os }})
     strategy:

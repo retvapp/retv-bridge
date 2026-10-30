@@ -1,12 +1,13 @@
 {
+  "profiles": ["bridge", "helper"],
   "description": "A failure whose text says the TV has no space left (\"no space left on device\", any letter case) is answered no-space instead of internal, so the site can say the TV's storage is full; the text itself still never reaches the site. installApk still removes the staged file when staging fails this way.",
   "adb": {
     "devices": {
-      "192.168.1.5:5555": {
+      "$tvSerial": {
         "model": "MiTV-AYFR0",
         "writeError": "adb: error: failed to copy 'snap.json' to '/sdcard/ReTV/snap.json': remote No space left on device",
         "shell": {
-          "echo x > /data/local/tmp/x": {
+          "mv /sdcard/ReTV/a.json.tmp /sdcard/ReTV/a.json": {
             "error": "sh: write error: no space left on device"
           },
           "rm -f /data/local/tmp/retv-install.apk": {
@@ -26,11 +27,11 @@
   },
   "steps": [
     {"open":{"origin":"https://retv.app","host":"$host"},"expectStatus":101},
-    {"send":{"id":1,"token":"$token","type":"connect","ip":"192.168.1.5","port":5555},"expect":{"id":1,"ok":true,"result":{"serial":"192.168.1.5:5555","model":"MiTV-AYFR0"}}},
-    {"send":{"id":2,"token":"$token","type":"writeFile","serial":"192.168.1.5:5555","path":"/sdcard/ReTV/snap.json","data":"{}"},"expect":{"id":2,"ok":false,"error":"no-space"}},
-    {"send":{"id":3,"token":"$token","type":"writeBytes","serial":"192.168.1.5:5555","path":"/sdcard/ReTV/a.bin","offset":0,"total":1,"data":"eA=="},"expect":{"id":3,"ok":false,"error":"no-space"}},
-    {"send":{"id":4,"token":"$token","type":"run","serial":"192.168.1.5:5555","cmd":"echo x > /data/local/tmp/x"},"expect":{"id":4,"ok":false,"error":"no-space"}},
-    {"send":{"id":5,"token":"$token","type":"installApk","serial":"192.168.1.5:5555","url":"https://retv.app/downloads/retv-home-1.0.1-10001.apk","sha256":"5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea"},"expect":{"id":5,"ok":false,"error":"no-space"}},
-    {"expectAdb":{"pushed":{},"ran":[["192.168.1.5:5555","echo x > /data/local/tmp/x"],["192.168.1.5:5555","rm -f /data/local/tmp/retv-install.apk"]]}}
+    {"send":{"id":1,"token":"$token","type":"connect","ip":"$tvIp"},"expect":{"id":1,"ok":true,"result":{"serial":"$tvSerial","model":"MiTV-AYFR0"}}},
+    {"send":{"id":2,"token":"$token","type":"writeFile","serial":"$tvSerial","path":"/sdcard/ReTV/snap.json","data":"{}"},"expect":{"id":2,"ok":false,"error":"no-space"}},
+    {"send":{"id":3,"token":"$token","type":"writeBytes","serial":"$tvSerial","path":"/sdcard/ReTV/a.bin","offset":0,"total":1,"data":"eA=="},"expect":{"id":3,"ok":false,"error":"no-space"}},
+    {"send":{"id":4,"token":"$token","type":"run","serial":"$tvSerial","cmd":"mv /sdcard/ReTV/a.json.tmp /sdcard/ReTV/a.json"},"expect":{"id":4,"ok":false,"error":"no-space"}},
+    {"send":{"id":5,"token":"$token","type":"installApk","serial":"$tvSerial","url":"https://retv.app/downloads/retv-home-1.0.1-10001.apk","sha256":"5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea"},"expect":{"id":5,"ok":false,"error":"no-space"}},
+    {"expectAdb":{"pushed":{},"ran":[["$tvSerial","mv /sdcard/ReTV/a.json.tmp /sdcard/ReTV/a.json"],["$tvSerial","rm -f /data/local/tmp/retv-install.apk"]]}}
   ]
 }

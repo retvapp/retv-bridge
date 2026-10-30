@@ -1,4 +1,5 @@
 {
+  "profiles": ["bridge"],
   "description": "connect and pair accept only dotted IPv4 in 10/8, 172.16/12, 192.168/16 and 169.254/16; anything else is ip-not-allowed and never reaches adb.",
   "adb": {"devices": {"192.168.1.5:5555": {"model": "MiTV-AYFR0"}}},
   "steps": [

@@ -34,6 +34,7 @@ use tokio_tungstenite::tungstenite::{Error as WsError, Message};
 use tokio_tungstenite::WebSocketStream;
 
 use crate::api::{BridgeDevice, TransportError};
+use crate::commands::allow_command;
 use crate::events::BridgeEvent;
 use crate::install::{cancelled, clip_utf16, install_apk};
 use crate::pairing::{PairFinish, PairStart};
@@ -42,8 +43,8 @@ use crate::protocol::{
 };
 use crate::server::Shared;
 use crate::validate::{
-    decode_base64, is_allowed_apk_url, is_allowed_binary_path, is_allowed_device_path, is_lan_ipv4,
-    port_value,
+    decode_base64, is_allowed_binary_path, is_allowed_device_path, is_installable_apk_url,
+    is_lan_ipv4, port_value,
 };
 
 /// `run` text in the log is clipped to this many characters.
@@ -523,11 +524,20 @@ fn prepare_checked(
             }
             "run" => {
                 let d = state.device(msg.get("serial"))?;
-                let cmd = str_param(msg.get("cmd"), MAX_COMMAND_CHARS)?.to_string();
-                shared.log(format!("[bridge] run {}: {}", d.serial(), clip(&cmd)));
+                let cmd = str_param(msg.get("cmd"), MAX_COMMAND_CHARS)?;
+                // Only the engine's command shapes run, as the line rebuilt from their checked words (protocol v3).
+                let Some(line) = allow_command(cmd) else {
+                    shared.log(format!(
+                        "[bridge] refused {} (not on the allow-list): {}",
+                        d.serial(),
+                        clip(cmd)
+                    ));
+                    return Err(WireError::new("command-not-allowed"));
+                };
+                shared.log(format!("[bridge] run {}: {}", d.serial(), clip(&line)));
                 let shared = shared.clone();
                 later(async move {
-                    let r = d.run(&cmd).await?;
+                    let r = d.run(&line).await?;
                     shared.log(format!("[bridge]   exit {}", r.exit_code));
                     Ok(json!({ "exitCode": r.exit_code, "stdout": r.stdout, "stderr": r.stderr }))
                 })
@@ -556,7 +566,7 @@ fn prepare_checked(
             "installApk" => {
                 let d = state.device(msg.get("serial"))?;
                 let url = match msg.get("url").and_then(Value::as_str) {
-                    Some(u) if is_allowed_apk_url(u) => u.to_string(),
+                    Some(u) if is_installable_apk_url(u) => u.to_string(),
                     _ => return Err(WireError::new("url-not-allowed")),
                 };
                 let sha256 = match msg.get("sha256").and_then(Value::as_str) {

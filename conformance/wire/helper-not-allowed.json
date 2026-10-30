@@ -1,0 +1,27 @@
+{
+  "profiles": ["helper"],
+  "description": "Helper profile: pair, pairStart and pairFinish do not exist here (the E2E handshake replaces site pairing; adbPair replaces adb pairing): bad-request, like any unknown type, and the session stays. No request needs a token and none is ever bad-token. A serial other than self, or self before connect, is unknown-serial; another ip is ip-not-allowed. Nothing reaches the TV.",
+  "adb": {
+    "devices": {"self": {"model": "MiTV-AYFR0"}},
+    "helper": {"sdk": 30, "release": "11", "classicPort": true, "rsa": "allow"}
+  },
+  "steps": [
+    {"send": {"id": 1, "type": "pair", "ip": "192.168.1.5", "port": 37000, "code": "123456"}, "expect": {"id": 1, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 2, "type": "pairStart"}, "expect": {"id": 2, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 3, "type": "pairFinish", "code": "123456"}, "expect": {"id": 3, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 4, "token": "wrong", "type": "noSuchType"}, "expect": {"id": 4, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 5, "token": "wrong", "type": "discover"}, "expect": {"id": 5, "ok": true, "result": {"tvs": [{"name": "MiTV-AYFR0", "ip": "127.0.0.1", "connectPort": null, "pairPort": null}]}}},
+    {"send": {"id": 6, "type": "adbStart", "method": "classic"}, "expect": {"id": 6, "ok": true, "result": {"method": "classic"}}},
+    {"send": {"id": 7, "type": "run", "serial": "self", "cmd": "getprop"}, "expect": {"id": 7, "ok": false, "error": "unknown-serial"}},
+    {"send": {"id": 8, "type": "writeFile", "serial": "self", "path": "/sdcard/ReTV/a.json", "data": "{}"}, "expect": {"id": 8, "ok": false, "error": "unknown-serial"}},
+    {"send": {"id": 9, "type": "writeBytes", "serial": "self", "path": "/sdcard/ReTV/a.bin", "offset": 0, "total": 1, "data": "eA=="}, "expect": {"id": 9, "ok": false, "error": "unknown-serial"}},
+    {"send": {"id": 10, "type": "disconnect", "serial": "self"}, "expect": {"id": 10, "ok": false, "error": "unknown-serial"}},
+    {"send": {"id": 11, "type": "connect", "ip": "10.0.0.7"}, "expect": {"id": 11, "ok": false, "error": "ip-not-allowed"}},
+    {"send": {"id": 12, "type": "connect", "ip": "127.0.0.1"}, "expect": {"id": 12, "ok": true, "result": {"serial": "self", "model": "MiTV-AYFR0"}}},
+    {"send": {"id": 13, "type": "run", "serial": "192.168.1.5:5555", "cmd": "getprop"}, "expect": {"id": 13, "ok": false, "error": "unknown-serial"}},
+    {"send": {"id": 14, "type": "installApk", "serial": "127.0.0.1", "url": "https://retv.app/downloads/x.apk", "sha256": "5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea"}, "expect": {"id": 14, "ok": false, "error": "unknown-serial"}},
+    {"send": {"id": 15, "type": "run", "serial": "self", "cmd": "echo hi"}, "expect": {"id": 15, "ok": false, "error": "command-not-allowed"}},
+    {"send": {"id": 16, "type": "run", "serial": "self", "cmd": "settings put global adb_wifi_enabled 0"}, "expect": {"id": 16, "ok": false, "error": "command-not-allowed"}},
+    {"expectAdb": {"connected": ["self"], "ran": [], "pushed": {}, "paired": []}}
+  ]
+}

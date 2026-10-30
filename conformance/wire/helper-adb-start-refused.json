@@ -1,0 +1,14 @@
+{
+  "profiles": ["helper"],
+  "description": "Helper profile: the person declines the RSA dialog (unauthorized), and wireless debugging is off, so no _adb-tls-connect service appears within 5 s (wireless-off). The session stays without adb.",
+  "adb": {
+    "devices": {"self": {"model": "MiTV-AYFR0"}},
+    "helper": {"sdk": 30, "release": "11", "classicPort": true, "rsa": "deny", "pairingService": true, "wirelessConnect": false, "wirelessPaired": true}
+  },
+  "steps": [
+    {"send": {"id": 1, "type": "adbStart", "method": "classic"}, "expect": {"id": 1, "ok": false, "error": "unauthorized"}},
+    {"send": {"id": 2, "type": "adbStart", "method": "wireless"}, "expect": {"id": 2, "ok": false, "error": "wireless-off"}},
+    {"send": {"id": 3, "type": "hello"}, "expect": {"id": 3, "ok": true, "result": {"version": "$any", "protocol": 3, "features": ["installApk", "allowlist", "helper"], "adb": false, "paired": true}}},
+    {"send": {"id": 4, "type": "connect", "ip": "127.0.0.1"}, "expect": {"id": 4, "ok": false, "error": "adb-not-ready"}}
+  ]
+}

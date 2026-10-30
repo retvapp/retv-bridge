@@ -2,6 +2,7 @@
 //! other crates implement.
 
 pub mod api;
+pub mod commands;
 pub mod events;
 mod install;
 pub mod pairing;

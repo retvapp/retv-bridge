@@ -1,4 +1,5 @@
 {
+  "profiles": ["bridge"],
   "description": "connect without a port takes the TV's connect port from mDNS (discover), else 5555; an explicit port wins; connecting the same serial again replaces (and closes) the old connection.",
   "adb": {
     "tvs": [

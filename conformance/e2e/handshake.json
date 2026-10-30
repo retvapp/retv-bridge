@@ -1,0 +1,162 @@
+{
+  "description": "ReTV Helper E2E handshake and key schedule. The keys are RFC 7748 §6.1's (tv = Alice, ctl = Bob), so sharedHex is its K. See ../README.md, section e2e.",
+  "cases": [
+    {
+      "name": "qr",
+      "mode": "qr",
+      "roomIdHex": "00112233445566778899aabbccddeeff",
+      "kHex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+      "tvPrivHex": "77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a",
+      "tvPubHex": "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a",
+      "tvNonceHex": "101112131415161718191a1b1c1d1e1f",
+      "ctlPrivHex": "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb",
+      "ctlPubHex": "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f",
+      "ctlNonceHex": "202122232425262728292a2b2c2d2e2f",
+      "tvPubHashHex": "300c9c9603b92a4b39ed3958bf924011",
+      "commitHex": null,
+      "ctlHello": "{\"e2e\":\"hi\",\"v\":1,\"mode\":\"qr\",\"pub\":\"3p7bfXt9wbTTW2HC7OQ1Nz-DQ8hbeGdNrfx-FG-IK08\",\"nonce\":\"ICEiIyQlJicoKSorLC0uLw\"}",
+      "tvHello": "{\"e2e\":\"hi\",\"v\":1,\"pub\":\"hSDwCYkwp1R0i33ctD73Wg2_Og0mOBr066SpjqqbTmo\",\"nonce\":\"EBESExQVFhcYGRobHB0eHw\"}",
+      "ctlReveal": null,
+      "sharedHex": "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742",
+      "ikmHex": "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+      "saltHex": "75e5a49ddf3cb88501e9fbabc8db04f36e9611e04520a9807375fd57a6414f52",
+      "keysInfoHex": "726574762d68656c7065722d7631206b657973018520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6ade9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f",
+      "sasInfoHex": "726574762d68656c7065722d763120736173018520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6ade9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f",
+      "okmHex": "6e6a32f895895de9cfbfd060c9e3907f0721ecdde45cc796f1c35729762a0caf2db5ebdf668eb204b68c90ea1e411fc7000f371b22ab206150ba0f274bdbc3eb",
+      "kCtlToTvHex": "6e6a32f895895de9cfbfd060c9e3907f0721ecdde45cc796f1c35729762a0caf",
+      "kTvToCtlHex": "2db5ebdf668eb204b68c90ea1e411fc7000f371b22ab206150ba0f274bdbc3eb",
+      "sasOkmHex": "be57f84318291a33",
+      "sas": "979059"
+    },
+    {
+      "name": "code",
+      "mode": "code",
+      "roomIdHex": "00112233445566778899aabbccddeeff",
+      "kHex": null,
+      "tvPrivHex": "77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a",
+      "tvPubHex": "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a",
+      "tvNonceHex": "101112131415161718191a1b1c1d1e1f",
+      "ctlPrivHex": "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb",
+      "ctlPubHex": "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f",
+      "ctlNonceHex": "202122232425262728292a2b2c2d2e2f",
+      "tvPubHashHex": "300c9c9603b92a4b39ed3958bf924011",
+      "commitHex": "c0aa64f6e86da6b14187d8bfdadeb1ff7f1d6236ed0d99d57c5ed324e495b5a1",
+      "ctlHello": "{\"e2e\":\"hi\",\"v\":1,\"mode\":\"code\",\"commit\":\"wKpk9uhtprFBh9i_2t6x_38dYjbtDZnVfF7TJOSVtaE\"}",
+      "tvHello": "{\"e2e\":\"hi\",\"v\":1,\"pub\":\"hSDwCYkwp1R0i33ctD73Wg2_Og0mOBr066SpjqqbTmo\",\"nonce\":\"EBESExQVFhcYGRobHB0eHw\"}",
+      "ctlReveal": "{\"e2e\":\"reveal\",\"v\":1,\"pub\":\"3p7bfXt9wbTTW2HC7OQ1Nz-DQ8hbeGdNrfx-FG-IK08\",\"nonce\":\"ICEiIyQlJicoKSorLC0uLw\"}",
+      "sharedHex": "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742",
+      "ikmHex": "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742",
+      "saltHex": "75e5a49ddf3cb88501e9fbabc8db04f36e9611e04520a9807375fd57a6414f52",
+      "keysInfoHex": "726574762d68656c7065722d7631206b657973028520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6ade9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f",
+      "sasInfoHex": "726574762d68656c7065722d763120736173028520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6ade9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f",
+      "okmHex": "6dc42ab49cd7e0505ab51430aa664883af5c01f51fd0a6f857eadfb15396b04080e9cf09c0b8966d827bf65ba5ac4c0096969f8bb1e3bbda390f50e7d69b16b9",
+      "kCtlToTvHex": "6dc42ab49cd7e0505ab51430aa664883af5c01f51fd0a6f857eadfb15396b040",
+      "kTvToCtlHex": "80e9cf09c0b8966d827bf65ba5ac4c0096969f8bb1e3bbda390f50e7d69b16b9",
+      "sasOkmHex": "b1a6c1ddb27c1b12",
+      "sas": "624594"
+    }
+  ],
+  "reject": [
+    {
+      "name": "downgrade-qr-tv-gets-code-hello",
+      "case": "qr",
+      "side": "tv",
+      "feed": [
+        "{\"e2e\":\"hi\",\"v\":1,\"mode\":\"code\",\"commit\":\"wKpk9uhtprFBh9i_2t6x_38dYjbtDZnVfF7TJOSVtaE\"}"
+      ],
+      "error": "e2e-mode-mismatch"
+    },
+    {
+      "name": "code-tv-gets-qr-hello",
+      "case": "code",
+      "side": "tv",
+      "feed": [
+        "{\"e2e\":\"hi\",\"v\":1,\"mode\":\"qr\",\"pub\":\"3p7bfXt9wbTTW2HC7OQ1Nz-DQ8hbeGdNrfx-FG-IK08\",\"nonce\":\"ICEiIyQlJicoKSorLC0uLw\"}"
+      ],
+      "error": "e2e-mode-mismatch"
+    },
+    {
+      "name": "reveal-breaks-commitment",
+      "case": "code",
+      "side": "tv",
+      "feed": [
+        "{\"e2e\":\"hi\",\"v\":1,\"mode\":\"code\",\"commit\":\"wKpk9uhtprFBh9i_2t6x_38dYjbtDZnVfF7TJOSVtaE\"}",
+        "{\"e2e\":\"reveal\",\"v\":1,\"pub\":\"3p7bfXt9wbTTW2HC7OQ1Nz-DQ8hbeGdNrfx-FG-IK08\",\"nonce\":\"ICEiIyQlJicoKSorLC0uLg\"}"
+      ],
+      "error": "e2e-bad-commit"
+    },
+    {
+      "name": "reveal-without-hello",
+      "case": "code",
+      "side": "tv",
+      "feed": [
+        "{\"e2e\":\"reveal\",\"v\":1,\"pub\":\"3p7bfXt9wbTTW2HC7OQ1Nz-DQ8hbeGdNrfx-FG-IK08\",\"nonce\":\"ICEiIyQlJicoKSorLC0uLw\"}"
+      ],
+      "error": "e2e-bad-hello"
+    },
+    {
+      "name": "second-hello",
+      "case": "qr",
+      "side": "tv",
+      "feed": [
+        "{\"e2e\":\"hi\",\"v\":1,\"mode\":\"qr\",\"pub\":\"3p7bfXt9wbTTW2HC7OQ1Nz-DQ8hbeGdNrfx-FG-IK08\",\"nonce\":\"ICEiIyQlJicoKSorLC0uLw\"}",
+        "{\"e2e\":\"hi\",\"v\":1,\"mode\":\"qr\",\"pub\":\"3p7bfXt9wbTTW2HC7OQ1Nz-DQ8hbeGdNrfx-FG-IK08\",\"nonce\":\"ICEiIyQlJicoKSorLC0uLw\"}"
+      ],
+      "error": "e2e-bad-hello"
+    },
+    {
+      "name": "wrong-version",
+      "case": "qr",
+      "side": "tv",
+      "feed": [
+        "{\"e2e\":\"hi\",\"v\":2,\"mode\":\"qr\",\"pub\":\"3p7bfXt9wbTTW2HC7OQ1Nz-DQ8hbeGdNrfx-FG-IK08\",\"nonce\":\"ICEiIyQlJicoKSorLC0uLw\"}"
+      ],
+      "error": "e2e-bad-hello"
+    },
+    {
+      "name": "extra-key",
+      "case": "qr",
+      "side": "tv",
+      "feed": [
+        "{\"e2e\":\"hi\",\"v\":1,\"mode\":\"qr\",\"pub\":\"3p7bfXt9wbTTW2HC7OQ1Nz-DQ8hbeGdNrfx-FG-IK08\",\"nonce\":\"ICEiIyQlJicoKSorLC0uLw\",\"x\":1}"
+      ],
+      "error": "e2e-bad-hello"
+    },
+    {
+      "name": "short-pub",
+      "case": "qr",
+      "side": "tv",
+      "feed": [
+        "{\"e2e\":\"hi\",\"v\":1,\"mode\":\"qr\",\"pub\":\"ntt9e33BtNNbYcLs5DU3P4NDyFt4Z02t_H4Ub4grTw\",\"nonce\":\"ICEiIyQlJicoKSorLC0uLw\"}"
+      ],
+      "error": "e2e-bad-hello"
+    },
+    {
+      "name": "low-order-pub",
+      "case": "qr",
+      "side": "tv",
+      "feed": [
+        "{\"e2e\":\"hi\",\"v\":1,\"mode\":\"qr\",\"pub\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"nonce\":\"ICEiIyQlJicoKSorLC0uLw\"}"
+      ],
+      "error": "e2e-bad-key"
+    },
+    {
+      "name": "commit-wrong-length",
+      "case": "code",
+      "side": "tv",
+      "feed": [
+        "{\"e2e\":\"hi\",\"v\":1,\"mode\":\"code\",\"commit\":\"ICEiIyQlJicoKSorLC0uLw\"}"
+      ],
+      "error": "e2e-bad-hello"
+    },
+    {
+      "name": "tv-pub-hash-mismatch",
+      "case": "qr",
+      "side": "ctl",
+      "feed": [
+        "{\"e2e\":\"hi\",\"v\":1,\"pub\":\"3p7bfXt9wbTTW2HC7OQ1Nz-DQ8hbeGdNrfx-FG-IK08\",\"nonce\":\"EBESExQVFhcYGRobHB0eHw\"}"
+      ],
+      "error": "e2e-bad-pub-hash"
+    }
+  ]
+}

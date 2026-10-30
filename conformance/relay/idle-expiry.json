@@ -1,0 +1,22 @@
+{
+  "description": "A room expires idleMs (30 min) after its last activity: open, or touch (the server touches on every frame). sweep returns each expired room with its peers (tv first) in creation order, and forgets it. Expiry is inclusive: at exactly idleMs the room is gone.",
+  "steps": [
+    {"at":0,"op":"open","room":"RoomOneAAAAAAAAAAAAAAA","role":"tv","peer":"tv-1","expect":"ok"},
+    {"at":0,"op":"open","room":"RoomOneAAAAAAAAAAAAAAA","role":"ctl","peer":"phone-1","expect":"ok"},
+    {"at":0,"op":"open","room":"RoomTwoAAAAAAAAAAAAAAA","role":"tv","peer":"tv-2","expect":"ok"},
+    {"at":1000000,"op":"touch","room":"RoomOneAAAAAAAAAAAAAAA"},
+    {"at":1000000,"op":"touch","room":"RoomFourAAAAAAAAAAAAAA"},
+    {"at":1799999,"op":"sweep","expect":{"expired":[]}},
+    {"at":1800000,"op":"sweep","expect":{"expired":[{"roomId":"RoomTwoAAAAAAAAAAAAAAA","peers":["tv-2"]}]}},
+    {"at":1800000,"op":"open","room":"RoomTwoAAAAAAAAAAAAAAA","role":"ctl","peer":"phone-2","expect":"no-room"},
+    {"at":2799999,"op":"sweep","expect":{"expired":[]}},
+    {"at":2800000,"op":"sweep","expect":{"expired":[{"roomId":"RoomOneAAAAAAAAAAAAAAA","peers":["tv-1","phone-1"]}]}},
+    {"at":2800000,"op":"forward","room":"RoomOneAAAAAAAAAAAAAAA","from":"tv-1","expect":null},
+    {"at":2800000,"op":"open","room":"RoomOneAAAAAAAAAAAAAAA","role":"ctl","peer":"phone-1","expect":"no-room"},
+    {"at":3000000,"op":"open","room":"Room_3-AAAAAAAAAAAAAAA","role":"tv","peer":"tv-3","expect":"ok"},
+    {"at":4000000,"op":"open","room":"Room_3-AAAAAAAAAAAAAAA","role":"ctl","peer":"phone-3","expect":"ok"},
+    {"at":5799999,"op":"sweep","expect":{"expired":[]}},
+    {"at":5800000,"op":"sweep","expect":{"expired":[{"roomId":"Room_3-AAAAAAAAAAAAAAA","peers":["tv-3","phone-3"]}]}},
+    {"at":5800000,"op":"sweep","expect":{"expired":[]}}
+  ]
+}

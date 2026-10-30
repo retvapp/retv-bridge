@@ -1,0 +1,18 @@
+{
+  "profiles": ["helper"],
+  "description": "Helper profile: endSession {debugging:\"off\"} after a classic session turns adb off with settings put global adb_enabled 0, as the last command (it ends adbd and our connection with it), answers {debugging:\"off\"} and closes the session. debugging must be off or keep (bad-request, the session stays).",
+  "adb": {
+    "devices": {"self": {"model": "MiTV-AYFR0"}},
+    "helper": {"sdk": 30, "release": "11", "classicPort": true, "rsa": "allow"}
+  },
+  "steps": [
+    {"send": {"id": 1, "type": "adbStart", "method": "classic"}, "expect": {"id": 1, "ok": true, "result": {"method": "classic"}}},
+    {"send": {"id": 2, "type": "connect", "ip": "127.0.0.1"}, "expect": {"id": 2, "ok": true, "result": {"serial": "self", "model": "MiTV-AYFR0"}}},
+    {"send": {"id": 3, "type": "endSession"}, "expect": {"id": 3, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 4, "type": "endSession", "debugging": "on"}, "expect": {"id": 4, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 5, "type": "endSession", "debugging": false}, "expect": {"id": 5, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 6, "type": "endSession", "debugging": "off"}, "expect": {"id": 6, "ok": true, "result": {"debugging": "off"}}},
+    {"expectClose": true},
+    {"expectAdb": {"ran": [["self", "settings put global adb_enabled 0"]], "pushed": {}}}
+  ]
+}

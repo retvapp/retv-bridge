@@ -1,0 +1,14 @@
+{
+  "profiles": ["helper"],
+  "description": "Helper profile: nobody answers the RSA dialog within 60 s (unauthorized); wireless then works, because our key is already paired.",
+  "adb": {
+    "devices": {"self": {"model": "Chromecast"}},
+    "helper": {"sdk": 34, "release": "14", "classicPort": true, "rsa": "timeout", "pairingService": true, "wirelessConnect": true, "wirelessPaired": true}
+  },
+  "steps": [
+    {"send": {"id": 1, "type": "adbStart", "method": "classic"}, "expect": {"id": 1, "ok": false, "error": "unauthorized"}},
+    {"send": {"id": 2, "type": "adbStart", "method": "wireless"}, "expect": {"id": 2, "ok": true, "result": {"method": "wireless"}}},
+    {"send": {"id": 3, "type": "helperInfo"}, "expect": {"id": 3, "ok": true, "result": {"sdk": 34, "release": "14", "model": "Chromecast", "classicPort": true, "adb": "ready", "method": "wireless"}}},
+    {"send": {"id": 4, "type": "connect", "ip": "127.0.0.1"}, "expect": {"id": 4, "ok": true, "result": {"serial": "self", "model": "Chromecast"}}}
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "profiles": ["helper"],
+  "description": "Helper profile: nothing answers on 127.0.0.1:5555 (classic adb off), so helperInfo says classicPort:false and classic is device-unreachable.",
+  "adb": {
+    "devices": {"self": {"model": "Chromecast"}},
+    "helper": {"sdk": 34, "release": "14", "classicPort": false, "rsa": "allow", "pairingService": true, "wirelessConnect": true, "wirelessPaired": false}
+  },
+  "steps": [
+    {"send": {"id": 1, "type": "helperInfo"}, "expect": {"id": 1, "ok": true, "result": {"sdk": 34, "release": "14", "model": "Chromecast", "classicPort": false, "adb": "none", "method": null}}},
+    {"send": {"id": 2, "type": "adbStart", "method": "classic"}, "expect": {"id": 2, "ok": false, "error": "device-unreachable"}},
+    {"send": {"id": 3, "type": "adbStart", "method": "wireless"}, "expect": {"id": 3, "ok": false, "error": "pairing-needed"}}
+  ]
+}

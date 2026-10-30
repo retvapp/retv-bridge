@@ -106,7 +106,10 @@ impl BridgeDevice for GatedDevice {
     async fn run(&self, cmd: &str) -> Result<ShellResult, TransportError> {
         self.ops.lock().unwrap().push(format!("run {cmd}"));
         let mut stdout = String::new();
-        if cmd.starts_with("pm install") {
+        if cmd == "dumpsys package" {
+            // A slow read: waits for the gate like an install does.
+            self.gate.acquire().await.unwrap().forget();
+        } else if cmd.starts_with("pm install") {
             assert!(!self.panic_pm, "pm install blew up");
             self.gate.acquire().await.unwrap().forget();
             self.ops.lock().unwrap().push("pm done".into());
@@ -408,7 +411,7 @@ async fn shell_api_events_sessions_codes_and_shutdown() {
     );
     send(
         &mut a,
-        json!({"id": 4, "type": "run", "serial": SERIAL, "cmd": "echo hi"}),
+        json!({"id": 4, "type": "run", "serial": SERIAL, "cmd": "getprop sys.boot_completed"}),
     )
     .await;
     recv(&mut a).await;
@@ -452,7 +455,7 @@ async fn shell_api_events_sessions_codes_and_shutdown() {
         .collect();
     assert!(
         logs.iter()
-            .any(|l| l.contains("run 192.168.1.5:5555: echo hi")),
+            .any(|l| l.contains("run 192.168.1.5:5555: getprop sys.boot_completed")),
         "{logs:?}"
     );
     for l in &logs {
@@ -550,7 +553,7 @@ async fn pipelined_requests_keep_arrival_order() {
             &mut a,
             vec![
                 json!({"id": 7, "type": "disconnect", "serial": SERIAL}),
-                json!({"id": 8, "type": "run", "serial": SERIAL, "cmd": "echo hi"}),
+                json!({"id": 8, "type": "run", "serial": SERIAL, "cmd": "getprop"}),
             ],
         )
         .await;
@@ -572,7 +575,7 @@ async fn a_socket_runs_at_most_32_requests_at_once() {
     connect(&mut a, 1).await;
     // These never finish until the gate opens.
     let blocked: Vec<Value> = (100..132)
-        .map(|id| json!({"id": id, "type": "run", "serial": SERIAL, "cmd": "pm install x"}))
+        .map(|id| json!({"id": id, "type": "run", "serial": SERIAL, "cmd": "dumpsys package"}))
         .collect();
     send_all(&mut a, blocked).await;
     until("32 commands running", || ops(&s).len() == 32).await;
@@ -583,7 +586,7 @@ async fn a_socket_runs_at_most_32_requests_at_once() {
     );
     send(
         &mut a,
-        json!({"id": 201, "type": "run", "serial": SERIAL, "cmd": "echo"}),
+        json!({"id": 201, "type": "run", "serial": SERIAL, "cmd": "getprop"}),
     )
     .await;
     assert_eq!(
@@ -595,7 +598,7 @@ async fn a_socket_runs_at_most_32_requests_at_once() {
     assert!(r.values().all(|v| v["ok"] == json!(true)), "{r:?}");
     send(
         &mut a,
-        json!({"id": 202, "type": "run", "serial": SERIAL, "cmd": "echo"}),
+        json!({"id": 202, "type": "run", "serial": SERIAL, "cmd": "getprop"}),
     )
     .await;
     assert_eq!(recv(&mut a).await["ok"], json!(true));

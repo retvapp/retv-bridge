@@ -1,4 +1,5 @@
 {
+  "profiles": ["bridge"],
   "description": "pair is adb pairing with the TV (the 6 digits on the TV screen), not site pairing: it needs the token, a LAN ip, a port and exactly 6 digits.",
   "adb": {"pairCode": "123456"},
   "steps": [

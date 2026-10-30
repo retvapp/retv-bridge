@@ -1,0 +1,29 @@
+{
+  "description": "ipKey is taken over the IPv6 /64 prefix (one subscriber usually holds a whole /64), so addresses inside one /64 share every per-IP limit, in any spelling; another /64 does not. IPv4 stays exact, and an IPv4-mapped IPv6 address (::ffff:a.b.c.d) is that IPv4 address.",
+  "steps": [
+    {"at":0,"op":"lookup","code":"000000","ip":"2001:db8:0:1::1","expect":"not-found"},
+    {"at":0,"op":"lookup","code":"000000","ip":"2001:db8:0:1::2","expect":"not-found"},
+    {"at":0,"op":"lookup","code":"000000","ip":"2001:db8:0:1:ffff:ffff:ffff:ffff","expect":"not-found"},
+    {"at":0,"op":"lookup","code":"000000","ip":"2001:0DB8:0000:0001:0:0:0:3","expect":"not-found"},
+    {"at":0,"op":"lookup","code":"000000","ip":"2001:db8::1:1:2:3:4","expect":"not-found"},
+    {"at":0,"op":"lookup","code":"000000","ip":"2001:db8:0:1::9","expect":"rate-limited"},
+    {"at":0,"op":"lookup","code":"000000","ip":"2001:db8:0:2::1","expect":"not-found"},
+    {"at":0,"op":"lookup","code":"000000","ip":"203.0.113.9","expect":"not-found"},
+    {"at":0,"op":"lookup","code":"000000","ip":"203.0.113.9","expect":"not-found"},
+    {"at":0,"op":"lookup","code":"000000","ip":"203.0.113.9","expect":"not-found"},
+    {"at":0,"op":"lookup","code":"000000","ip":"203.0.113.9","expect":"not-found"},
+    {"at":0,"op":"lookup","code":"000000","ip":"::ffff:203.0.113.9","expect":"not-found"},
+    {"at":0,"op":"lookup","code":"000000","ip":"203.0.113.9","expect":"rate-limited"},
+    {"at":0,"op":"lookup","code":"000000","ip":"203.0.113.10","expect":"not-found"},
+    {"at":0,"op":"socket","ip":"2001:db8:0:5::1","action":"open","expect":true},
+    {"at":0,"op":"socket","ip":"2001:db8:0:5::2","action":"open","expect":true},
+    {"at":0,"op":"socket","ip":"2001:db8:0:5::3","action":"open","expect":true},
+    {"at":0,"op":"socket","ip":"2001:db8:0:5::4","action":"open","expect":true},
+    {"at":0,"op":"socket","ip":"2001:db8:0:5::5","action":"open","expect":true},
+    {"at":0,"op":"socket","ip":"2001:db8:0:5::6","action":"open","expect":true},
+    {"at":0,"op":"socket","ip":"2001:db8:0:5::7","action":"open","expect":true},
+    {"at":0,"op":"socket","ip":"2001:db8:0:5::8","action":"open","expect":true},
+    {"at":0,"op":"socket","ip":"2001:db8:0:5::9","action":"open","expect":false},
+    {"at":0,"op":"socket","ip":"2001:db8:0:6::1","action":"open","expect":true}
+  ]
+}

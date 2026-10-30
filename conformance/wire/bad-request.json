@@ -1,4 +1,5 @@
 {
+  "profiles": ["bridge"],
   "description": "Malformed messages get bad-request (id -1 when there is no usable id) and the socket stays open. The id is checked before the token: an id-less message without a token is bad-request, not bad-token. Binary frames are never parsed, even if they hold JSON.",
   "adb": {"devices": {"192.168.1.5:5555": {"model": "MiTV-AYFR0"}}},
   "steps": [
@@ -21,7 +22,7 @@
     {"send": {"id": 5, "token": "$token", "type": "run", "serial": "192.168.1.5:5555", "cmd": ""}, "expect": {"id": 5, "ok": false, "error": "bad-request"}},
     {"send": {"id": 6, "token": "$token", "type": "run", "serial": "192.168.1.5:5555"}, "expect": {"id": 6, "ok": false, "error": "bad-request"}},
     {"send": {"id": 7, "token": "$token", "type": "writeFile", "serial": "192.168.1.5:5555", "path": "/sdcard/ReTV/a.json", "data": 5}, "expect": {"id": 7, "ok": false, "error": "bad-request"}},
-    {"send": {"id": 8, "token": "$token", "type": "hello"}, "expect": {"id": 8, "ok": true, "result": {"version": "$any", "protocol": 2, "features": ["installApk"], "adb": true, "paired": true}}},
+    {"send": {"id": 8, "token": "$token", "type": "hello"}, "expect": {"id": 8, "ok": true, "result": {"version": "$any", "protocol": 3, "features": ["installApk", "allowlist"], "adb": true, "paired": true}}},
     {"expectAdb": {"ran": [], "pushed": {}}}
   ]
 }

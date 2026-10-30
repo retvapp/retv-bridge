@@ -6,6 +6,7 @@
 
 use tauri::AppHandle;
 
+#[cfg(unix)]
 use crate::{lock, shared, tray};
 
 /// SIGTERM and SIGINT, both registered at once when this is made, so no

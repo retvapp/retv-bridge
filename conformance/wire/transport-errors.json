@@ -1,4 +1,5 @@
 {
+  "profiles": ["bridge"],
   "description": "A failed connect answers the transport's error code as the error; an unexpected failure without a code is internal. The socket stays usable.",
   "adb": {
     "devices": {
@@ -20,7 +21,7 @@
     {"send": {"id": 5, "token": "$token", "type": "connect", "ip": "192.168.1.14", "port": 5555}, "expect": {"id": 5, "ok": false, "error": "connection-lost"}},
     {"send": {"id": 6, "token": "$token", "type": "connect", "ip": "192.168.1.15", "port": 5555}, "expect": {"id": 6, "ok": false, "error": "internal"}},
     {"send": {"id": 7, "token": "$token", "type": "connect", "ip": "192.168.1.99", "port": 5555}, "expect": {"id": 7, "ok": false, "error": "device-unreachable"}},
-    {"send": {"id": 8, "token": "$token", "type": "run", "serial": "192.168.1.11:5555", "cmd": "echo hi"}, "expect": {"id": 8, "ok": false, "error": "unknown-serial"}},
+    {"send": {"id": 8, "token": "$token", "type": "run", "serial": "192.168.1.11:5555", "cmd": "getprop sys.boot_completed"}, "expect": {"id": 8, "ok": false, "error": "unknown-serial"}},
     {"send": {"id": 9, "token": "$token", "type": "connect", "ip": "192.168.1.5", "port": 5555}, "expect": {"id": 9, "ok": true, "result": {"serial": "192.168.1.5:5555", "model": "MiTV-AYFR0"}}},
     {"expectAdb": {"connected": ["192.168.1.5:5555"]}}
   ]

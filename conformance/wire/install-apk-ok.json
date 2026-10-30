@@ -1,8 +1,9 @@
 {
+  "profiles": ["bridge", "helper"],
   "description": "installApk (protocol v2): the bridge downloads the APK itself (no redirects) from retv.app/downloads or ru.retv.app/downloads, checks it is at most 64 MiB and that its SHA-256 is the pinned lowercase hex, stages it at /data/local/tmp/retv-install.apk, runs pm install -r --user current (the foreground user only, never every user: a Google TV kids profile is a separate user) and then always removes the staged file. Success is pm's stdout containing Success; the result's output is pm's stdout+stderr, trimmed. Checks in order: token, serial, url (url-not-allowed), then sha256 (exactly 64 lowercase hex digits, else bad-request).",
   "adb": {
     "devices": {
-      "192.168.1.5:5555": {
+      "$tvSerial": {
         "model": "MiTV-AYFR0",
         "shell": {
           "pm install -r --user current /data/local/tmp/retv-install.apk": {
@@ -31,17 +32,15 @@
   },
   "steps": [
     {"open":{"origin":"https://retv.app","host":"$host"},"expectStatus":101},
-    {"send":{"id":1,"token":"$token","type":"connect","ip":"192.168.1.5","port":5555},"expect":{"id":1,"ok":true,"result":{"serial":"192.168.1.5:5555","model":"MiTV-AYFR0"}}},
-    {"send":{"id":2,"token":"$token","type":"installApk","serial":"192.168.1.5:5555","url":"https://retv.app/downloads/retv-home-1.0.1-10001.apk","sha256":"5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea"},"expect":{"id":2,"ok":true,"result":{"output":"Success"}}},
-    {"expectAdb":{"pushed":{"/data/local/tmp/retv-install.apk":"sha256:5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea"},"ran":[["192.168.1.5:5555","pm install -r --user current /data/local/tmp/retv-install.apk"],["192.168.1.5:5555","rm -f /data/local/tmp/retv-install.apk"]]}},
-    {"send":{"id":3,"token":"$token","type":"installApk","serial":"192.168.1.5:5555","url":"https://ru.retv.app/downloads/apps/x-1.apk","sha256":"5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea"},"expect":{"id":3,"ok":true,"result":{"output":"Success"}}},
+    {"send":{"id":1,"token":"$token","type":"connect","ip":"$tvIp"},"expect":{"id":1,"ok":true,"result":{"serial":"$tvSerial","model":"MiTV-AYFR0"}}},
+    {"send":{"id":2,"token":"$token","type":"installApk","serial":"$tvSerial","url":"https://retv.app/downloads/retv-home-1.0.1-10001.apk","sha256":"5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea"},"expect":{"id":2,"ok":true,"result":{"output":"Success"}}},
+    {"expectAdb":{"pushed":{"/data/local/tmp/retv-install.apk":"sha256:5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea"},"ran":[["$tvSerial","pm install -r --user current /data/local/tmp/retv-install.apk"],["$tvSerial","rm -f /data/local/tmp/retv-install.apk"]]}},
+    {"send":{"id":3,"token":"$token","type":"installApk","serial":"$tvSerial","url":"https://ru.retv.app/downloads/apps/x-1.apk","sha256":"5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea"},"expect":{"id":3,"ok":true,"result":{"output":"Success"}}},
     {"send":{"id":4,"token":"$token","type":"installApk","serial":"192.168.1.9:5555","url":"https://evil.example/x.apk","sha256":"nope"},"expect":{"id":4,"ok":false,"error":"unknown-serial"}},
-    {"send":{"id":5,"token":"$token","type":"installApk","serial":"192.168.1.5:5555","url":"https://retv.app/downloads/retv-home-1.0.1-10001.apk","sha256":"5702EEC1AC8168696925FA05D9C3C0D9CC46153618DAEBFDAD8A551907968DEA"},"expect":{"id":5,"ok":false,"error":"bad-request"}},
-    {"send":{"id":6,"token":"$token","type":"installApk","serial":"192.168.1.5:5555","url":"https://retv.app/downloads/retv-home-1.0.1-10001.apk","sha256":"5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea0"},"expect":{"id":6,"ok":false,"error":"bad-request"}},
-    {"send":{"id":7,"token":"$token","type":"installApk","serial":"192.168.1.5:5555","url":"https://retv.app/downloads/retv-home-1.0.1-10001.apk"},"expect":{"id":7,"ok":false,"error":"bad-request"}},
-    {"send":{"id":8,"token":"$token","type":"installApk","serial":"192.168.1.5:5555","url":"http://retv.app/downloads/x.apk","sha256":5},"expect":{"id":8,"ok":false,"error":"url-not-allowed"}},
-    {"expectAdb":{"ran":[["192.168.1.5:5555","pm install -r --user current /data/local/tmp/retv-install.apk"],["192.168.1.5:5555","rm -f /data/local/tmp/retv-install.apk"],["192.168.1.5:5555","pm install -r --user current /data/local/tmp/retv-install.apk"],["192.168.1.5:5555","rm -f /data/local/tmp/retv-install.apk"]]}},
-    {"send":{"id":9,"token":"wrong","type":"installApk","serial":"192.168.1.5:5555","url":"https://retv.app/downloads/retv-home-1.0.1-10001.apk","sha256":"5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea"},"expect":{"id":9,"ok":false,"error":"bad-token"}},
-    {"expectClose":true,"closeCode":1008}
+    {"send":{"id":5,"token":"$token","type":"installApk","serial":"$tvSerial","url":"https://retv.app/downloads/retv-home-1.0.1-10001.apk","sha256":"5702EEC1AC8168696925FA05D9C3C0D9CC46153618DAEBFDAD8A551907968DEA"},"expect":{"id":5,"ok":false,"error":"bad-request"}},
+    {"send":{"id":6,"token":"$token","type":"installApk","serial":"$tvSerial","url":"https://retv.app/downloads/retv-home-1.0.1-10001.apk","sha256":"5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea0"},"expect":{"id":6,"ok":false,"error":"bad-request"}},
+    {"send":{"id":7,"token":"$token","type":"installApk","serial":"$tvSerial","url":"https://retv.app/downloads/retv-home-1.0.1-10001.apk"},"expect":{"id":7,"ok":false,"error":"bad-request"}},
+    {"send":{"id":8,"token":"$token","type":"installApk","serial":"$tvSerial","url":"http://retv.app/downloads/x.apk","sha256":5},"expect":{"id":8,"ok":false,"error":"url-not-allowed"}},
+    {"expectAdb":{"ran":[["$tvSerial","pm install -r --user current /data/local/tmp/retv-install.apk"],["$tvSerial","rm -f /data/local/tmp/retv-install.apk"],["$tvSerial","pm install -r --user current /data/local/tmp/retv-install.apk"],["$tvSerial","rm -f /data/local/tmp/retv-install.apk"]]}}
   ]
 }

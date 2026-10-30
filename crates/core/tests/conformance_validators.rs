@@ -2,7 +2,7 @@
 
 use retv_bridge_core::validate::{
     decode_base64, group_services, is_allowed_apk_url, is_allowed_binary_path,
-    is_allowed_device_path, is_lan_ipv4, is_port, split_address, MdnsService,
+    is_allowed_device_path, is_dev_apk_url, is_lan_ipv4, is_port, split_address, MdnsService,
 };
 use serde_json::{json, Value};
 
@@ -61,6 +61,7 @@ fn call(name: &str, input: &Value) -> Value {
             None => Value::Null,
         },
         "isAllowedApkUrl" => json!(input.as_str().is_some_and(is_allowed_apk_url)),
+        "isDevApkUrl" => json!(input.as_str().is_some_and(is_dev_apk_url)),
         "groupServices" => serde_json::to_value(group_services(&services(input))).unwrap(),
         other => panic!("validators.json names an unknown validator {other}"),
     }
@@ -74,6 +75,7 @@ const KNOWN: &[&str] = &[
     "splitAddress",
     "decodeBase64",
     "isAllowedApkUrl",
+    "isDevApkUrl",
     "groupServices",
 ];
 
@@ -139,6 +141,11 @@ fn decode_base64_vectors() {
 #[test]
 fn group_services_vectors() {
     replay("groupServices");
+}
+
+#[test]
+fn is_dev_apk_url_vectors() {
+    replay("isDevApkUrl");
 }
 
 #[test]

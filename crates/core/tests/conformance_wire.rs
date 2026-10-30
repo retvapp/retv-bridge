@@ -212,7 +212,13 @@ async fn reply(ws: &mut Ws, where_: &str) -> Value {
 
 async fn closed(ws: &mut Ws, where_: &str) -> Option<u16> {
     match next(ws, WAIT).await {
-        Some(Next::Closed(c)) => c,
+        Some(Next::Closed(c)) => {
+            // Send the close reply tungstenite queued, so the bridge finishes
+            // the handshake now instead of after its 2 s close wait (it closes
+            // the socket's TVs only then, and expectAdb waits 2 s at most).
+            let _ = ws.flush().await;
+            c
+        }
         Some(Next::Reply(v)) => panic!("{where_}: unread reply {v} while waiting for the close"),
         None => panic!("{where_}: timed out waiting for the socket to close"),
     }
@@ -263,9 +269,45 @@ fn drain_codes(events: &mut broadcast::Receiver<BridgeEvent>, code: &mut Option<
     }
 }
 
+fn read_fixture(file: &str) -> Value {
+    serde_json::from_str(&std::fs::read_to_string(fixture_dir().join(file)).unwrap()).unwrap()
+}
+
+/// A wire fixture's profiles (README "Profiles"): `["bridge"]` when absent.
+fn profiles(sc: &Value, file: &str) -> Vec<String> {
+    let Some(p) = sc.get("profiles") else {
+        return vec!["bridge".into()];
+    };
+    match p.as_array() {
+        Some(a) if !a.is_empty() && a.iter().all(|x| x == "bridge" || x == "helper") => {
+            a.iter().map(|x| x.as_str().unwrap().to_string()).collect()
+        }
+        _ => panic!("{file}: bad profiles {p}"),
+    }
+}
+
+/// The bridge's TV for `"$tvIp"` / `"$tvSerial"` (README "Profiles"): exact
+/// string values and object keys.
+fn bind_tv(v: &Value) -> Value {
+    let tv = |s: &str| match s {
+        "$tvIp" => Some("192.168.1.5"),
+        "$tvSerial" => Some("192.168.1.5:5555"),
+        _ => None,
+    };
+    match v {
+        Value::String(s) => Value::String(tv(s).unwrap_or(s).to_string()),
+        Value::Array(a) => Value::Array(a.iter().map(bind_tv).collect()),
+        Value::Object(o) => Value::Object(
+            o.iter()
+                .map(|(k, x)| (tv(k).unwrap_or(k).to_string(), bind_tv(x)))
+                .collect::<Map<_, _>>(),
+        ),
+        other => other.clone(),
+    }
+}
+
 async fn run_fixture(file: &str, model_via_getprop: bool) {
-    let sc: Value =
-        serde_json::from_str(&std::fs::read_to_string(fixture_dir().join(file)).unwrap()).unwrap();
+    let sc = bind_tv(&read_fixture(file));
     let adb_spec = sc.get("adb").cloned().unwrap_or(Value::Null);
     let adb = FakeAdb::new(&adb_spec);
     let adb = Arc::new(if model_via_getprop {
@@ -410,6 +452,11 @@ async fn wire_fixtures() {
         .filter(|f| f.ends_with(".json"))
         .collect();
     files.sort();
+    let all = files.len();
+    // The bridge runs the `bridge` profile. The `helper` one is ReTV Helper's;
+    // its runner is in-process, in Kotlin.
+    files.retain(|f| profiles(&read_fixture(f), f).iter().any(|p| p == "bridge"));
+    eprintln!("{} bridge fixtures of {all}", files.len());
     assert!(files.len() >= 12, "too few fixtures: {files:?}");
     for f in &files {
         let t = std::time::Instant::now();

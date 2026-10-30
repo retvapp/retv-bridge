@@ -1,4 +1,5 @@
 {
+  "profiles": ["bridge"],
   "description": "discover returns the TVs adb sees over mDNS, as { name, ip, connectPort, pairPort } with null for a missing port.",
   "adb": {
     "tvs": [

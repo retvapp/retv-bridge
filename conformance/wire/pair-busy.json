@@ -1,4 +1,5 @@
 {
+  "profiles": ["bridge"],
   "description": "A live code is bound to the Origin that started it, across sockets: another Origin gets pair-busy with retryIn for start and finish (its code is never checked), the same Origin on a new socket can finish.",
   "pairCodes": ["482917", "135790"],
   "steps": [

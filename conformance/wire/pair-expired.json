@@ -1,4 +1,5 @@
 {
+  "profiles": ["bridge"],
   "description": "pairFinish with no live code is pair-expired; a code lives 120 s; a code that is not a string or is over 16 characters is bad-request and not a miss.",
   "pairCodes": ["482917", "135790"],
   "steps": [

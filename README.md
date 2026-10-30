@@ -14,11 +14,11 @@ Only the addresses listed in [PRIVACY.md](PRIVACY.md): Google (platform-tools, o
 
 ## What the Bridge trusts
 
-The Bridge is access to `adb shell`, not a sandbox. Know what it does and does not protect:
+The Bridge relays commands to `adb shell`; it is not a sandbox. Know what it does and does not protect:
 
-- **Whoever has the session token has full adb.** Any code that knows the token and runs on an allowed site gets a full adb shell on every device your computer has already authorised for adb: TVs, phones and other Android devices on the network, on any port. An XSS bug or a compromised script on an allowed site (including a third-party library on it) is therefore a real threat: such code can read the token from the tab and run anything on those devices.
+- **Whoever has the session token can do what the ReTV site does, and only that.** `run` takes only the command shapes the ReTV engine sends, with every argument checked ([PROTOCOL.md, Protocol v3](PROTOCOL.md#protocol-v3)); anything else is refused. So code that knows the token and runs on an allowed site can turn apps off and on, remove an app for the user, change the handful of settings ReTV manages (the Private DNS host included) and install only APKs the ReTV site serves, with the SHA-256 it pins, on every device your computer has already authorised for adb: TVs, phones and other Android devices on the network, on any port. It can also read what the site reads (notifications, usage, all settings), point Private DNS at a server of its choice until someone changes it back, and switch on an installed app's accessibility service. It cannot run other commands, install other APKs or read files outside `/sdcard/ReTV/`. An XSS bug or a compromised script on an allowed site is still a real threat within those limits; [PROTOCOL.md](PROTOCOL.md#protocol-v3) lists the mitigations (a local, per-run token, loopback only, the site's CSP, restore putting the settings back).
 - **`Origin` checks only stop other websites in the browser.** Any program on your computer can forge the `Origin` header. Against local processes only the token helps, and a process that can read your terminal window or browser memory can read the token too.
-- **The `writeFile` restriction is not a security boundary.** `writeFile` writes only inside `/sdcard/ReTV/`, but `run` executes any shell command the adb user can. The restriction protects against path mistakes, not against an attacker.
+- **Files.** `writeFile` writes only inside `/sdcard/ReTV/`, and `run` cannot write anywhere else: the allow-list has no redirection and no file-writing command outside that folder.
 - **Run the Bridge only while you use ReTV and quit it afterwards.** While it is not running, the site cannot do anything to your devices.
 
 ## Build from source

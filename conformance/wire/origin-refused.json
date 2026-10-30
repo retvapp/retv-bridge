@@ -1,4 +1,5 @@
 {
+  "profiles": ["bridge"],
   "description": "The upgrade is refused with 403 for a foreign or missing Origin and for a foreign Host (DNS rebinding), before any message; refusals never touch pairing. Origin and Host match exactly, case-sensitively. A plain HTTP request (no upgrade) gets 426.",
   "pairCodes": ["482917"],
   "steps": [

@@ -1,0 +1,14 @@
+{
+  "profiles": ["helper"],
+  "description": "Helper profile: endSession {debugging:\"keep\"} leaves adb as it is (no command runs), answers {debugging:\"kept\"} and closes the session.",
+  "adb": {
+    "devices": {"self": {"model": "MiTV-AYFR0"}},
+    "helper": {"sdk": 30, "release": "11", "classicPort": true, "rsa": "allow"}
+  },
+  "steps": [
+    {"send": {"id": 1, "type": "adbStart", "method": "classic"}, "expect": {"id": 1, "ok": true, "result": {"method": "classic"}}},
+    {"send": {"id": 2, "type": "endSession", "debugging": "keep"}, "expect": {"id": 2, "ok": true, "result": {"debugging": "kept"}}},
+    {"expectClose": true},
+    {"expectAdb": {"ran": []}}
+  ]
+}

@@ -1,13 +1,13 @@
 //! The real `installApk` downloader: one HTTPS GET with the OS's TLS, no
 //! redirects (any 3xx is `FetchError::Redirect`), at most `max_bytes` by
-//! `Content-Length` and while reading. Only URLs `is_allowed_apk_url`
-//! accepts are fetched. The bridge itself bounds the whole download in time.
+//! `Content-Length` and while reading. Only URLs `is_installable_apk_url`
+//! accepts are fetched (a debug build also takes a dev site over plain HTTP). The bridge itself bounds the whole download in time.
 
 use std::time::Duration;
 
 use async_trait::async_trait;
 use retv_bridge_core::api::{ApkFetcher, FetchError};
-use retv_bridge_core::validate::is_allowed_apk_url;
+use retv_bridge_core::validate::{is_installable_apk_url, DEV_APK_URLS};
 
 pub struct HttpsApkFetcher {
     client: reqwest::Client,
@@ -30,7 +30,7 @@ impl HttpsApkFetcher {
     /// The error text is for local logs.
     pub fn new() -> Result<Self, String> {
         Ok(HttpsApkFetcher {
-            client: client(true)?,
+            client: client(!DEV_APK_URLS)?,
             check_url: true,
         })
     }
@@ -39,7 +39,7 @@ impl HttpsApkFetcher {
 #[async_trait]
 impl ApkFetcher for HttpsApkFetcher {
     async fn fetch(&self, url: &str, max_bytes: u64) -> Result<Vec<u8>, FetchError> {
-        if self.check_url && !is_allowed_apk_url(url) {
+        if self.check_url && !is_installable_apk_url(url) {
             return Err(FetchError::Network);
         }
         let mut resp = self

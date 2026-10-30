@@ -1,18 +1,19 @@
 {
+  "profiles": ["bridge"],
   "description": "A socket may only use serials it connected itself: run, writeFile, writeBytes and disconnect on another socket's serial are unknown-serial and never reach the device.",
-  "adb": {"devices": {"192.168.1.5:5555": {"model": "MiTV-AYFR0", "shell": {"echo hi": {"stdout": "hi\n", "stderr": "", "exitCode": 0}}}}},
+  "adb": {"devices": {"192.168.1.5:5555": {"model": "MiTV-AYFR0", "shell": {"getprop sys.boot_completed": {"stdout": "1\n", "stderr": "", "exitCode": 0}}}}},
   "steps": [
     {"open": {"origin": "http://127.0.0.1:5180", "host": "$host"}, "expectStatus": 101},
     {"socket": 1, "open": {"origin": "http://127.0.0.1:5180", "host": "$host"}, "expectStatus": 101},
     {"send": {"id": 1, "token": "$token", "type": "connect", "ip": "192.168.1.5", "port": 5555}, "expect": {"id": 1, "ok": true, "result": {"serial": "192.168.1.5:5555", "model": "MiTV-AYFR0"}}},
-    {"socket": 1, "send": {"id": 1, "token": "$token", "type": "run", "serial": "192.168.1.5:5555", "cmd": "echo hi"}, "expect": {"id": 1, "ok": false, "error": "unknown-serial"}},
+    {"socket": 1, "send": {"id": 1, "token": "$token", "type": "run", "serial": "192.168.1.5:5555", "cmd": "getprop sys.boot_completed"}, "expect": {"id": 1, "ok": false, "error": "unknown-serial"}},
     {"socket": 1, "send": {"id": 2, "token": "$token", "type": "writeFile", "serial": "192.168.1.5:5555", "path": "/sdcard/ReTV/x.json", "data": "{}"}, "expect": {"id": 2, "ok": false, "error": "unknown-serial"}},
     {"socket": 1, "send": {"id": 3, "token": "$token", "type": "writeBytes", "serial": "192.168.1.5:5555", "path": "/sdcard/ReTV/x.bin", "offset": 0, "total": 1, "data": "eA=="}, "expect": {"id": 3, "ok": false, "error": "unknown-serial"}},
     {"socket": 1, "send": {"id": 4, "token": "$token", "type": "disconnect", "serial": "192.168.1.5:5555"}, "expect": {"id": 4, "ok": false, "error": "unknown-serial"}},
-    {"socket": 1, "send": {"id": 5, "token": "$token", "type": "run", "serial": 5555, "cmd": "echo hi"}, "expect": {"id": 5, "ok": false, "error": "unknown-serial"}},
-    {"socket": 1, "send": {"id": 6, "token": "$token", "type": "run", "cmd": "echo hi"}, "expect": {"id": 6, "ok": false, "error": "unknown-serial"}},
+    {"socket": 1, "send": {"id": 5, "token": "$token", "type": "run", "serial": 5555, "cmd": "getprop sys.boot_completed"}, "expect": {"id": 5, "ok": false, "error": "unknown-serial"}},
+    {"socket": 1, "send": {"id": 6, "token": "$token", "type": "run", "cmd": "getprop sys.boot_completed"}, "expect": {"id": 6, "ok": false, "error": "unknown-serial"}},
     {"socket": 1, "send": {"id": 7, "token": "$token", "type": "writeFile", "serial": "192.168.1.5:5555", "path": "/etc/passwd", "data": "{}"}, "expect": {"id": 7, "ok": false, "error": "unknown-serial"}},
-    {"send": {"id": 2, "token": "$token", "type": "run", "serial": "192.168.1.5:5555", "cmd": "echo hi"}, "expect": {"id": 2, "ok": true, "result": {"exitCode": 0, "stdout": "hi\n", "stderr": ""}}},
-    {"expectAdb": {"ran": [["192.168.1.5:5555", "echo hi"]], "pushed": {}, "closed": []}}
+    {"send": {"id": 2, "token": "$token", "type": "run", "serial": "192.168.1.5:5555", "cmd": "getprop sys.boot_completed"}, "expect": {"id": 2, "ok": true, "result": {"exitCode": 0, "stdout": "1\n", "stderr": ""}}},
+    {"expectAdb": {"ran": [["192.168.1.5:5555", "getprop sys.boot_completed"]], "pushed": {}, "closed": []}}
   ]
 }

@@ -1,0 +1,22 @@
+{
+  "profiles": ["helper"],
+  "description": "Helper profile: adbPair takes the 6 digits the TV's Wireless debugging pairing dialog shows (typed on the phone), pairs our key with the TV's pairing service, then connects wirelessly. code must be a string of exactly 6 digits (bad-request); a wrong code is pairing-failed and the person can try again.",
+  "adb": {
+    "pairCode": "482917",
+    "devices": {"self": {"model": "Chromecast"}},
+    "helper": {"sdk": 34, "release": "14", "classicPort": false, "pairingService": true, "wirelessConnect": true, "wirelessPaired": false}
+  },
+  "steps": [
+    {"send": {"id": 1, "type": "adbPair"}, "expect": {"id": 1, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 2, "type": "adbPair", "code": 482917}, "expect": {"id": 2, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 3, "type": "adbPair", "code": "48291"}, "expect": {"id": 3, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 4, "type": "adbPair", "code": "4829170"}, "expect": {"id": 4, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 5, "type": "adbPair", "code": "48291a"}, "expect": {"id": 5, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 6, "type": "adbPair", "code": "000000"}, "expect": {"id": 6, "ok": false, "error": "pairing-failed"}},
+    {"send": {"id": 7, "type": "hello"}, "expect": {"id": 7, "ok": true, "result": {"version": "$any", "protocol": 3, "features": ["installApk", "allowlist", "helper"], "adb": false, "paired": true}}},
+    {"send": {"id": 8, "type": "adbPair", "code": "482917"}, "expect": {"id": 8, "ok": true, "result": {"method": "wireless"}}},
+    {"send": {"id": 9, "type": "helperInfo"}, "expect": {"id": 9, "ok": true, "result": {"sdk": 34, "release": "14", "model": "Chromecast", "classicPort": false, "adb": "ready", "method": "wireless"}}},
+    {"send": {"id": 10, "type": "connect", "ip": "127.0.0.1"}, "expect": {"id": 10, "ok": true, "result": {"serial": "self", "model": "Chromecast"}}},
+    {"expectAdb": {"paired": ["self"], "connected": ["self"], "ran": []}}
+  ]
+}

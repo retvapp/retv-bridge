@@ -154,15 +154,54 @@ pub fn is_allowed_apk_url(url: &str) -> bool {
     if url.contains("..") || url.contains(['?', '#']) {
         return false;
     }
-    APK_URL_PREFIXES.iter().any(|prefix| {
-        url.strip_prefix(prefix).is_some_and(|rest| {
-            rest.len() > ".apk".len()
-                && rest.ends_with(".apk")
-                && rest
-                    .bytes()
-                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'/' | b'-'))
-        })
-    })
+    APK_URL_PREFIXES
+        .iter()
+        .any(|prefix| url.strip_prefix(prefix).is_some_and(apk_path))
+}
+
+/// The part after `/downloads/`: `[A-Za-z0-9._/-]+\.apk`.
+fn apk_path(rest: &str) -> bool {
+    rest.len() > ".apk".len()
+        && rest.ends_with(".apk")
+        && rest
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'/' | b'-'))
+}
+
+/// A dev site's APK (scripts/dev-stack.sh serves ReTV Home from the site itself):
+/// `http://` + `localhost`, `127.0.0.1` or a home-network IPv4, `:<port>` (1..65535, plain
+/// digits), then `/downloads/` and the same path rule as `is_allowed_apk_url`. Taken only
+/// when `DEV_APK_URLS` is on (debug builds).
+pub fn is_dev_apk_url(url: &str) -> bool {
+    if url.contains("..") || url.contains(['?', '#']) {
+        return false;
+    }
+    let Some(rest) = url.strip_prefix("http://") else {
+        return false;
+    };
+    let Some(slash) = rest.find('/') else {
+        return false;
+    };
+    let (authority, path) = rest.split_at(slash);
+    let Some((host, _port)) = split_address(authority) else {
+        return false;
+    };
+    (host == "localhost" || host == "127.0.0.1" || lan_ipv4(&host))
+        && path.strip_prefix("/downloads/").is_some_and(apk_path)
+}
+
+/// Whether this build lets `installApk` download from a dev site (`is_dev_apk_url`): debug
+/// builds only, never a release build.
+#[cfg(debug_assertions)]
+pub const DEV_APK_URLS: bool = true;
+/// Whether this build lets `installApk` download from a dev site (`is_dev_apk_url`): debug
+/// builds only, never a release build.
+#[cfg(not(debug_assertions))]
+pub const DEV_APK_URLS: bool = false;
+
+/// Where this build's `installApk` downloads from: the ReTV site, and in a debug build also a dev site.
+pub fn is_installable_apk_url(url: &str) -> bool {
+    is_allowed_apk_url(url) || (DEV_APK_URLS && is_dev_apk_url(url))
 }
 
 /// One adb service seen over mDNS.
@@ -231,6 +270,31 @@ mod tests {
             "https://retv.app.evil.example/downloads/x.apk"
         ));
         assert!(!is_allowed_apk_url("https://retv.app/other/x.apk"));
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn a_debug_build_installs_from_a_dev_site() {
+        assert!(is_installable_apk_url(
+            "http://localhost:5180/downloads/retv-home.apk"
+        ));
+        assert!(is_installable_apk_url("https://retv.app/downloads/x.apk"));
+        assert!(!is_installable_apk_url(
+            "http://evil.example:5180/downloads/x.apk"
+        ));
+    }
+
+    // Runs under `cargo test --release`.
+    #[cfg(not(debug_assertions))]
+    #[test]
+    fn a_release_build_installs_only_from_the_retv_site() {
+        assert!(!is_installable_apk_url(
+            "http://localhost:5180/downloads/retv-home.apk"
+        ));
+        assert!(!is_installable_apk_url(
+            "http://192.168.1.20:5180/downloads/x.apk"
+        ));
+        assert!(is_installable_apk_url("https://retv.app/downloads/x.apk"));
     }
 
     #[test]

@@ -1,4 +1,5 @@
 {
+  "profiles": ["bridge"],
   "description": "An adb failure that is not a transport code is answered exactly internal: device paths, stderr and other error text stay in the bridge's own log and never reach the site. Transport codes still pass through.",
   "adb": {
     "devices": {
@@ -8,8 +9,8 @@
       "192.168.1.5:5555": {
         "model": "MiTV-AYFR0",
         "shell": {
-          "cat /data/secret": {"error": "sh: /data/secret: Permission denied"},
-          "sleep 999": {"error": "connection-lost"}
+          "cat /sdcard/ReTV/secret.json": {"error": "cat: /sdcard/ReTV/secret.json: Permission denied"},
+          "dumpsys package": {"error": "connection-lost"}
         }
       }
     }
@@ -20,8 +21,8 @@
     {"send": {"id": 2, "token": "$token", "type": "connect", "ip": "192.168.1.21", "port": 5555}, "expect": {"id": 2, "ok": false, "error": "internal"}},
     {"send": {"id": 3, "token": "$token", "type": "connect", "ip": "192.168.1.22", "port": 5555}, "expect": {"id": 3, "ok": false, "error": "internal"}},
     {"send": {"id": 4, "token": "$token", "type": "connect", "ip": "192.168.1.5", "port": 5555}, "expect": {"id": 4, "ok": true, "result": {"serial": "192.168.1.5:5555", "model": "MiTV-AYFR0"}}},
-    {"send": {"id": 5, "token": "$token", "type": "run", "serial": "192.168.1.5:5555", "cmd": "cat /data/secret"}, "expect": {"id": 5, "ok": false, "error": "internal"}},
-    {"send": {"id": 6, "token": "$token", "type": "run", "serial": "192.168.1.5:5555", "cmd": "sleep 999"}, "expect": {"id": 6, "ok": false, "error": "connection-lost"}},
-    {"expectAdb": {"connected": ["192.168.1.5:5555"], "ran": [["192.168.1.5:5555", "cat /data/secret"], ["192.168.1.5:5555", "sleep 999"]]}}
+    {"send": {"id": 5, "token": "$token", "type": "run", "serial": "192.168.1.5:5555", "cmd": "cat /sdcard/ReTV/secret.json"}, "expect": {"id": 5, "ok": false, "error": "internal"}},
+    {"send": {"id": 6, "token": "$token", "type": "run", "serial": "192.168.1.5:5555", "cmd": "dumpsys package"}, "expect": {"id": 6, "ok": false, "error": "connection-lost"}},
+    {"expectAdb": {"connected": ["192.168.1.5:5555"], "ran": [["192.168.1.5:5555", "cat /sdcard/ReTV/secret.json"], ["192.168.1.5:5555", "dumpsys package"]]}}
   ]
 }

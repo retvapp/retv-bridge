@@ -1,0 +1,23 @@
+{
+  "description": "A room lives at most maxLifeMs (4 h) from its creation, however busy it is. A peer leaving and coming back does not renew it; only a new room (after the last peer left) starts a new life.",
+  "steps": [
+    {"at":0,"op":"open","room":"RoomOneAAAAAAAAAAAAAAA","role":"tv","peer":"tv","expect":"ok"},
+    {"at":0,"op":"open","room":"RoomOneAAAAAAAAAAAAAAA","role":"ctl","peer":"phone","expect":"ok"},
+    {"at":1500000,"op":"touch","room":"RoomOneAAAAAAAAAAAAAAA"},
+    {"at":3000000,"op":"touch","room":"RoomOneAAAAAAAAAAAAAAA"},
+    {"at":4500000,"op":"touch","room":"RoomOneAAAAAAAAAAAAAAA"},
+    {"at":6000000,"op":"touch","room":"RoomOneAAAAAAAAAAAAAAA"},
+    {"at":6500000,"op":"leave","room":"RoomOneAAAAAAAAAAAAAAA","peer":"tv","expect":{"notify":"phone"}},
+    {"at":6500000,"op":"open","room":"RoomOneAAAAAAAAAAAAAAA","role":"tv","peer":"tv-again","expect":"ok"},
+    {"at":7500000,"op":"touch","room":"RoomOneAAAAAAAAAAAAAAA"},
+    {"at":9000000,"op":"touch","room":"RoomOneAAAAAAAAAAAAAAA"},
+    {"at":10500000,"op":"touch","room":"RoomOneAAAAAAAAAAAAAAA"},
+    {"at":12000000,"op":"touch","room":"RoomOneAAAAAAAAAAAAAAA"},
+    {"at":13500000,"op":"touch","room":"RoomOneAAAAAAAAAAAAAAA"},
+    {"at":14399999,"op":"sweep","expect":{"expired":[]}},
+    {"at":14400000,"op":"sweep","expect":{"expired":[{"roomId":"RoomOneAAAAAAAAAAAAAAA","peers":["tv-again","phone"]}]}},
+    {"at":14400000,"op":"open","room":"RoomOneAAAAAAAAAAAAAAA","role":"tv","peer":"tv","expect":"ok"},
+    {"at":16199999,"op":"touch","room":"RoomOneAAAAAAAAAAAAAAA"},
+    {"at":16200000,"op":"sweep","expect":{"expired":[]}}
+  ]
+}

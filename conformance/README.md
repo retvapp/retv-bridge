@@ -5,14 +5,19 @@ them:
 
 - the TypeScript reference bridge, which lives in the ReTV monorepo and is not part of this repository (its
   runner is `test/conformance.test.ts` there);
-- the Rust bridge: `crates/core/tests/conformance_{validators,pairing,wire}.rs`.
+- the Rust bridge: `crates/core/tests/conformance_{validators,commands,pairing,wire}.rs`.
+
+ReTV Helper, the app on the TV that serves the same protocol through the ReTV relay (`PROTOCOL.md`, "Helper profile"),
+runs `validators.json`, `commands.json` and the `helper` wire fixtures in process (see [Profiles](#profiles)). Its
+runner lives in the ReTV monorepo and is not part of this repository.
 
 In this repository only the Rust runner runs: `cargo test -p retv-bridge-core --test conformance_validators
---test conformance_pairing --test conformance_wire` (or just `cargo test --workspace`).
+--test conformance_commands --test conformance_pairing --test conformance_wire` (or just `cargo test --workspace`).
 
-The TypeScript bridge defines the protocol (v2 now: v1 plus `features`, `installApk` and `no-space`). When a
-fixture and the TS bridge disagree, the fixture is wrong. A bridge that speaks only v1 fails `hello`'s
-`protocol` / `features` and the `install-apk-*` / `no-space` fixtures.
+The TypeScript bridge defines the protocol (v3 now: v2 plus the `run` allow-list, feature `allowlist`, error
+`command-not-allowed`). When a fixture and the TS bridge disagree, the fixture is wrong. A bridge that speaks only v2
+fails `hello`'s `protocol` / `features`, `commands.json` and `wire/run-allowlist.json`; one that speaks only v1 also
+fails the `install-apk-*` / `no-space` fixtures.
 A fixture is a contract: change one only together with `PROTOCOL.md`, and make both runners pass.
 
 Files:
@@ -20,9 +25,13 @@ Files:
 | File | What it drives |
 | --- | --- |
 | `validators.json` | the pure input checks |
+| `commands.json` | the `run` allow-list (protocol v3) |
 | `pairing.json` | the site pairing state machine (`pairStart` / `pairFinish`) with a fake clock |
-| `wire/*.json` | a running bridge over a real WebSocket, with a fake adb |
+| `wire/*.json` | a running bridge over a real WebSocket, with a fake adb; the `helper` ones, ReTV Helper's dispatcher in process |
+| `wire/run-per-user.json` | `run` with `--user N` commands: passed through unchanged, a SecurityException on stderr (exit 255) is an ordinary result |
 | `mdns/*.json` | captured mDNS answers (added by Phase 0, parsed by the Rust mDNS crate) |
+| `e2e/*.json` | the ReTV Helper end-to-end encryption (phone ↔ TV through the relay), not the bridge protocol |
+| `relay/*.json` | the ReTV relay's rooms, link codes and per-IP limits, not the bridge protocol |
 
 All fixtures are UTF-8 JSON. A top-level `"description"` (or a scenario's `"name"`) is for people; runners
 ignore it.
@@ -44,10 +53,21 @@ value (a non-string where a string is expected must give the "no" answer, not an
 | `isAllowedBinaryPath` | any | `isAllowedDevicePath`, or exactly `/data/local/tmp/retv-home.apk` |
 | `splitAddress` | string | `{ "ip", "port" }` split at the last `:`, or `null` unless the part after it is plain decimal digits without a leading zero, sign, space, `0x`, exponent or fraction, and 1..65535 |
 | `isAllowedApkUrl` | any | `true` for a string that starts with `https://retv.app/downloads/` or `https://ru.retv.app/downloads/`, whose rest matches `^[A-Za-z0-9._/-]+\.apk$`, and that has no `..`, `?` or `#` anywhere (v2) |
+| `isDevApkUrl` | any | `true` for a dev site's APK URL: `http://` + `localhost`, `127.0.0.1` or a LAN IPv4 (`isLanIpv4`), `:` + a plain decimal port 1..65535, then `/downloads/` and the `isAllowedApkUrl` path rule, no `..`, `?` or `#` (a dev bridge's `installApk` takes it: PROTOCOL.md "Development builds") |
 | `decodeBase64` | any | the decoded bytes as lowercase hex, or `null` unless the input is canonical padded standard base64: no whitespace, no URL-safe alphabet, unused trailing bits zero (`YR==` is `null`) |
 | `groupServices` | `[{ name, service, address }]`, adb's mDNS lines | the TVs, one per LAN IP in first-seen order: `{ name, ip, connectPort, pairPort }`. `name` is the first line's; `pairPort` from the last `_adb-tls-pairing.` line, `connectPort` from the first `_adb-tls-connect.` or `_adb.` line, else `null`. A line whose address does not `splitAddress` to a LAN IPv4 is skipped |
 
 Lengths are counted in UTF-16 code units in TS; every vector uses ASCII, so bytes and characters agree.
+
+## commands.json
+
+```json
+{ "description": "...", "vectors": [[cmd, expected], ...] }
+```
+
+Each vector calls `allowCommand(cmd)` (Rust `allow_command`) and compares the result with `expected`: the shell line the
+bridge runs (rebuilt from the checked words, see PROTOCOL.md "Protocol v3"), or `null` for a command the bridge refuses
+with `command-not-allowed`. A `cmd` that is not a string is refused (`null`), never an error.
 
 ## pairing.json
 
@@ -77,10 +97,10 @@ scenario. Absent means 0.
 ## wire/*.json
 
 ```json
-{ "description": "...", "adb": {...}, "pairCodes": ["482917", ...], "steps": [...] }
+{ "profiles": ["bridge"], "description": "...", "adb": {...}, "pairCodes": ["482917", ...], "steps": [...] }
 ```
 
-For each file the runner:
+For each file whose [profiles](#profiles) include `"bridge"`, the bridge runner:
 
 1. builds a fake adb from `adb` (below);
 2. starts the bridge on `127.0.0.1`, port 0 (any free port), with the session token `"test-token-123"`, a
@@ -124,7 +144,8 @@ Every field is optional. The fake behaves like this:
   part of the protocol: the fake answers `getprop ro.product.model` with `"<model>\n"` (exit 0, or exit 1
   without `model`) and does not record it in `ran`; a Rust fake may hand the model over with the connection
   instead.
-- **run(cmd)** on a device records `[serial, cmd]` in `ran`, then: `shell[cmd]` with `error` fails with that
+- **run(cmd)** on a device records `[serial, cmd]` in `ran`, then (`cmd` is what the bridge ran: in v3 the line it
+  rebuilt, so `shell` keys and `ran` hold rebuilt lines): `shell[cmd]` with `error` fails with that
   text (same rule as `connectError`); `shell[cmd]` with a result returns it; anything else returns
   `{ "stdout": "", "stderr": "", "exitCode": 127 }`.
 - **writeFile(path, text)** and **writeBytes(path, bytes)** record `pushed[path] = "sha256:<hex>"` of the UTF-8
@@ -184,6 +205,70 @@ element, numbers and strings by value. Inside `expect`:
 
 Replies keep the request's `id`; a message without a usable id is answered with `"id": -1`.
 
+### Profiles
+
+A wire fixture's top-level `"profiles"` lists who runs it: `"bridge"` (the TS and Rust bridges) and/or `"helper"`
+(ReTV Helper, `PROTOCOL.md` "Helper profile"). Absent means `["bridge"]`; every file states it anyway. Any other value
+(not a non-empty list of those two names) is a fixture error.
+
+- `["bridge"]`: what only a bridge has: Origin / Host, the session token (`bad-token`), `pairStart` / `pairFinish`, LAN
+  `connect` / `pair`, `discover` over mDNS, several sockets.
+- `["helper"]` (`helper-*.json`): what only the Helper has (`helperInfo`, `adbStart`, `adbPair`, `endSession`, `connect`
+  to the TV itself, its `hello`), and the Helper's twins of bridge scenarios whose TV address or sockets matter.
+- `["bridge", "helper"]`: `run` (the allow-list), `writeFile`, `writeBytes`, `installApk` and `no-space`, the same
+  contract in both. These fixtures name their one TV with two placeholders, replaced before the run as exact string
+  values and as object keys (in `adb.devices` too):
+
+  | placeholder | bridge | helper |
+  | --- | --- | --- |
+  | `"$tvIp"` | `"192.168.1.5"` | `"127.0.0.1"` |
+  | `"$tvSerial"` | `"192.168.1.5:5555"` | `"self"` |
+
+  Their `connect` sends no `port`, so the bridge takes 5555 (the fake announces no mDNS port). Every `send` keeps the
+  `"$token"` placeholder, which the bridge checks and the Helper ignores. They have no step only one side can run (no
+  wrong token, no second socket, no `hello`).
+
+### The helper runner
+
+ReTV Helper runs the `helper` fixtures **in process**: no socket, no relay, no E2E, no token.
+
+- `open` steps are skipped. A `helper` fixture has no `socket` other than 0, `httpGet`, `close` or `advanceMs` step.
+- `send` (after the `$token` / `$code` / `$bytes` expansion above), `sendRaw` and `sendOversize` hand that text to
+  `Dispatcher.handle(text)`; its reply is matched against `expect` as above. `sendBinary` does not occur.
+- `expectClose` means the dispatcher returned "close": alone, for the `send` before it (`endSession`, whose reply is
+  still sent first); with `sendOversize`, for that text (over 1 MiB, no reply). `closeCode` is not checked. No `send` follows it in the same fixture, but `expectAdb` may.
+- `expectAdb` reads the helper fake's record (below).
+- A shared fixture (`["bridge", "helper"]`) begins with `connect`, which on the Helper needs the session's adb first
+  (`adb-not-ready`). So before its steps the runner sends `{"type": "adbStart", "method": "classic"}` (with its own `id`)
+  and expects `{"method": "classic"}`; the fake's defaults allow it, and it records nothing. `helper-*.json` fixtures
+  start the session's adb themselves.
+
+The helper fake is built from the same `adb` object. `devices` has one entry, `"self"` (`$tvSerial`), with the same
+`model`, `shell`, `writeError` meaning as for the bridge; `http` and `pairCode` are as for the bridge. `adb.helper`
+describes the TV's own adb:
+
+```json
+"helper": { "sdk": 30, "release": "11", "classicPort": true, "rsa": "allow", "pairingService": true,
+            "wirelessConnect": true, "wirelessPaired": false }
+```
+
+| field | default | meaning |
+| --- | --- | --- |
+| `sdk`, `release` | `30`, `"11"` | `helperInfo`'s `sdk` and `release` (the model is `devices.self.model`, `""` when absent) |
+| `classicPort` | `true` | `127.0.0.1:5555` answers. `false`: `adbStart classic` is `device-unreachable` |
+| `rsa` | `"allow"` | the RSA dialog: `"allow"` connects; `"deny"` and `"timeout"` (no answer in 60 s) are `unauthorized` |
+| `pairingService` | `true` | an `_adb-tls-pairing` service appears. `false`: `adbPair` is `no-pairing-service` |
+| `wirelessConnect` | `true` | an `_adb-tls-connect` service appears. `false`: wireless `adbStart` (and `adbPair`'s connect) is `wireless-off` |
+| `wirelessPaired` | `false` | our key is already paired with the TV. `false`: `adbStart wireless` is `pairing-needed` until an `adbPair` succeeds |
+
+`adbPair` succeeds when `code` equals `pairCode`, records `"self"` in `paired` and sets `wirelessPaired`, else it is
+`pairing-failed`. `connect` records `"self"` in `connected`, `disconnect` records it in `closed`. `run`, `writeFile`,
+`writeBytes` and `installApk` record `ran` and `pushed` as for the bridge, with serial `"self"`. `endSession` records
+its command in `ran`: after a wireless session always `settings put global adb_wifi_enabled 0`, with `"off"` or
+`"keep"` (every Helper session ends with Wireless debugging off); after a classic session
+`settings put global adb_enabled 0` with `"off"`, and nothing with `"keep"`. The reply's `debugging` is the truth:
+`"off"` when debugging is now off (so `"keep"` after a wireless session answers `"off"`), `"kept"` otherwise.
+
 ## mdns/*.json
 
 Captured mDNS answers from real TVs, one per file, for the Rust mDNS parser:
@@ -197,3 +282,210 @@ Captured mDNS answers from real TVs, one per file, for the Rust mDNS parser:
 must find in it, in order. The TS bridge asks the adb server for mDNS and does not run these. Published
 fixtures and docs use neutral addresses: documentation examples use TEST-NET-1 (`192.0.2.x`), and fixtures
 that need a home-network address use `192.168.1.x` / `10.x`, never a real device's address.
+
+## e2e/*.json
+
+The end-to-end encryption between the phone (`ctl`) and ReTV Helper on the TV (`tv`) through the relay. It is not
+part of the bridge protocol and does not change `PROTOCOL.md`. The TypeScript reference is the web app's
+`wizard/relay/e2e.ts` in the ReTV monorepo (runner: `relay-e2e.test.ts` there), and the Helper's Kotlin must produce
+the same bytes. Hex is lowercase, text is UTF-8, and base64url has no padding.
+
+Sizes are fixed, and any other size is refused (`e2e-bad-key` for an input, `e2e-bad-hello` inside a message): keys
+32 bytes, nonces 16, `roomId` 16, `k` 32, `p` (pubHash) 16, the commitment 32.
+
+### The handshake
+
+Every hello carries a fresh 16-byte nonce from its sender. The relay tells these text frames from its own because
+`"e2e"` is the first key.
+
+- **QR mode** (the phone has `k` and `p` from the QR):
+  1. `ctl → tv {"e2e":"hi","v":1,"mode":"qr","pub":ctlPub,"nonce":ctlNonce}`
+  2. `tv → ctl {"e2e":"hi","v":1,"pub":tvPub,"nonce":tvNonce}`; the phone checks `pubHash(tvPub) == p`
+     (`e2e-bad-pub-hash`) before it seals anything.
+- **Code mode** (commit and reveal):
+  1. `ctl → tv {"e2e":"hi","v":1,"mode":"code","commit":C}`, `C = SHA-256("retv-e2e-commit" ‖ ctlPub ‖ ctlNonce)`
+  2. `tv → ctl {"e2e":"hi","v":1,"pub":tvPub,"nonce":tvNonce}`
+  3. `ctl → tv {"e2e":"reveal","v":1,"pub":ctlPub,"nonce":ctlNonce}`; the TV checks `C` (`e2e-bad-commit`).
+
+  The relay must commit to its key before it sees the TV's nonce, and the phone's nonce stays hidden until the TV has
+  committed to its own. So a relay in the middle cannot grind the SAS: each code-mode attempt is one guess with
+  probability 10^-6. With the attempt limit below, that is at most 3 guesses per action of the person at the TV.
+- The TV accepts only the mode it displays at that moment and refuses a hello for the other mode
+  (`e2e-mode-mismatch`). The start screen shows the QR only, so the TV expects QR mode. The link code appears only
+  after «Нет камеры? Показать код», which hides the QR and switches the TV to code mode. «Показать QR» switches back and
+  voids the code.
+  Messages have exactly the keys above, `v` = 1. A second hello, a reveal out of turn, or any text after a failure is
+  `e2e-bad-hello`, and a failed handshake stays failed.
+- `pubHash(pub)` = the first 16 bytes of `SHA-256(pub)`: the `p` in the QR link.
+
+TV rules, which the vectors cannot show:
+
+- A handshake is **complete** when the TV has opened the phone's first confirm frame. A TV keypair serves exactly one
+  completed handshake. Only then does the TV make a new keypair, and with it a new QR and code. The TV's first sealed
+  frame is `{"t":"confirm","next":p'}`, where `p'` is the pubHash of the next keypair, so a QR phone can re-handshake
+  after a dropped socket without scanning again.
+- In code mode the TV shows the SAS and dispatches nothing before «Разрешить».
+- **Failed code-mode attempts:**
+  - An attempt counts as failed once the TV has sent its hello, unless it ends in «Разрешить». That covers a missing or
+    bad reveal, a timeout, a socket drop, `peer-left` and «Не совпадает».
+  - After 3 failed attempts the TV stops accepting code-mode hellos until the person presses «Новый код» on the TV.
+    Nothing resets or rotates by itself.
+  - The phone never re-handshakes in code mode on its own. It shows a new SAS only when the person explicitly retries.
+
+### The key schedule
+
+- `shared = X25519(myPriv, theirPub)`. An all-zero `shared` is refused (`e2e-bad-key`).
+- `ikm = shared ‖ k` in QR mode, `ikm = shared` in code mode.
+- `salt = SHA-256("retv-helper-v1" ‖ roomId ‖ tvNonce ‖ ctlNonce)`.
+- `modeByte` = `0x01` QR, `0x02` code.
+- `okm = HKDF-SHA256(ikm, salt, info = "retv-helper-v1 keys" ‖ modeByte ‖ tvPub ‖ ctlPub, 64)`; `kCtlToTv = okm[0..32]`,
+  `kTvToCtl = okm[32..64]`.
+- `sas = HKDF-SHA256(ikm, salt, "retv-helper-v1 sas" ‖ modeByte ‖ tvPub ‖ ctlPub, 8)`, read as a big-endian unsigned
+  64-bit integer, mod 1 000 000, zero-padded to **6 digits**. It covers `shared`, both public keys and both nonces.
+
+### Frames
+
+- After the handshake, binary frames only: `counter (8 bytes BE) ‖ AES-256-GCM(key, nonce = dir ‖ counter, aad =
+  roomId, plain)`, with the 16-byte tag at the end. `dir` is 4 bytes BE: `1` ctl→tv, `2` tv→ctl.
+- The first sealed frame each way is a confirm, with exactly these keys: `{"t":"confirm"}` from the phone, and
+  `{"t":"confirm","next":"<22-char base64url>"}` from the TV (16 bytes, canonical, no padding). A peer that fails to
+  open it, or to parse it as the other side's confirm (`e2e-bad-confirm`), closes with `e2e-failed`.
+- Each direction counts from 0, and a receiver accepts exactly the next counter. A replay, gap, reorder, bad tag or
+  short frame is `e2e-bad-frame`, and it **latches**: every later `open` and `seal` on that session fails too.
+- A sender stops with `e2e-counter-exhausted` rather than wrap past `2^64 - 1`.
+
+### Files
+
+`handshake.json`:
+
+- `cases[]`, one for QR mode and one for code mode. Each has:
+  - the inputs: `roomIdHex`, `kHex` (the QR `k`, or `null`), both key pairs and both nonces;
+  - the exact message texts: `ctlHello`, `tvHello`, and `ctlReveal` (`null` in QR mode);
+  - every intermediate value: `tvPubHashHex`, `commitHex`, `sharedHex`, `ikmHex`, `saltHex`, `keysInfoHex`,
+    `sasInfoHex`, `okmHex`, `kCtlToTvHex`, `kTvToCtlHex`, `sasOkmHex`, `sas`.
+
+  The keys are RFC 7748 §6.1's (tv = Alice, ctl = Bob), so `sharedHex` is that RFC's `K`. With the case's keys and
+  nonces injected, a runner must produce each message text exactly.
+- `reject[]`: `{ name, case, side, feed: [text...], error }`. The runner builds that side for the case:
+  - the TV, with the case's mode, `k`, TV keys and TV nonce;
+  - or the phone, with its keys, nonce and `p`.
+
+  It feeds every text but the last, and each must succeed. The last must fail with `error`.
+
+`frames.json`:
+
+- `cases[]`, by the same `name`: `ctlToTv` and `tvToCtl`, the first three frames each way (`plainUtf8`,
+  `frameHex`). A runner seals each `plainUtf8` in order and must get `frameHex`, and opens each `frameHex` in order and
+  must get `plainUtf8`.
+- `reject[]`: `{ name, case, dir, steps: [{ frameHex, ok }] }`. The runner builds the receiving side of `dir` for that
+  case (`ctlToTv`: the TV) and opens each step in order. A step must succeed when `ok` is true, and fail with
+  `e2e-bad-frame` when it is false. The `latch-*` scenarios check that a session stays dead.
+- `confirm.accept[]`: `{ from, plainUtf8, nextHex }`. The confirm parser for `from` must accept `plainUtf8` and give
+  `nextHex` (`null` for the phone), and the builder must produce `plainUtf8` exactly.
+- `confirm.reject[]`: `{ name, from, plainHex }`. The parser for `from` must refuse those bytes (`e2e-bad-confirm`).
+  The bytes are hex because one case is not valid UTF-8.
+
+## relay/*.json
+
+The ReTV relay's pure logic: rooms, link codes and per-IP limits, with a fake clock. Like `e2e/*.json` it is not part
+of the bridge protocol. The reference is the ReTV server's `relay/{rooms,codes,limits}.ts` in the ReTV monorepo
+(runner: `relay/logic.test.ts` there; the WebSocket server around it is `relay/server.ts`, see [The relay's
+wire](#the-relays-wire)).
+
+The relay pairs two sockets and passes their frames on. It sees only ciphertext, room ids and link codes, never `k`,
+`p`, a key, a nonce or the SAS, and it logs no IP, code or content. Its rules never weaken the TV's E2E rules above:
+
+- A room id is 16 random bytes in base64url (`^[A-Za-z0-9_-]{22}$`), checked before anything else (`bad-room-id`).
+  The `tv` creates the room (`full` at `maxRooms`); a `ctl` needs an existing one (`no-room`). Each role has one
+  slot, and a second peer for it is `busy`. A peer that leaves frees its slot and the other peer is told; the last
+  one out deletes the room. A free `ctl` slot is open to anyone with the room id, which is safe because the TV's E2E
+  handshake, not the relay, decides who it talks to.
+- A room expires `idleMs` (30 min) after its last activity (an `open`, or a `touch` per frame), or `maxLifeMs` (4 h)
+  after it was created, whichever comes first. Rejoining does not renew its life. An expired room is gone at once, even
+  before a `sweep` removes it: `has` is false, `touch` does not renew it, `forward` gives `null`, `open` never
+  resurrects it (a `ctl` gets `no-room`), and the `full` check expires such rooms first. The next `sweep` still reports
+  each of them once, before the rooms it expires itself.
+- A link code is **6 random digits drawn fresh at every claim** (`crypto.randomInt`), never derived from the room
+  or reused on purpose. The TV claims one only when it shows the code («Нет камеры? Показать код», and again on
+  «Новый код»), so the code never appears with the QR. It lives 600 s and works once: a hit gives the room id and
+  consumes the code. A room has one live code; a new claim voids the old one, and `revoke` voids it when the TV goes
+  back to the QR or the room ends. The code only finds the room: the phone still needs the commit and reveal, the SAS
+  and «Разрешить» on the TV, and the TV's limit of 3 failed attempts until «Новый код» holds whatever the relay does.
+- 5 lookup misses from one IP within 10 min block that IP for 10 min: the 5th miss still answers `not-found`, and
+  every lookup in the block answers `rate-limited`, a right code included, without extending it. A malformed or
+  expired code is a miss.
+- **Global miss budget**, a cheap stop to probing from many IPs: 300 misses in total (over every IP) within 10 min
+  block **every** lookup for 10 min. The 300th miss still answers `not-found`; in the block every lookup answers
+  `rate-limited`, without extending it. A `rate-limited` answer is not a miss, a hit does not count, and claims still
+  work. With 10^6 codes and at most 1000 rooms, that caps a many-IP search at about 0.3 hits per 10 min, while the
+  person with the TV can still wait out the block or use the QR. The price: such an attack also blocks honest code
+  lookups for its duration (never the QR).
+- Per IP: at most 20 room creations per sliding hour (a refused one is not counted), 8 open sockets, and 10 link-code
+  claims per sliding 10 min (a refused one is not counted; a person presses «Новый код» far less often).
+- Limits key on `ipKey = HMAC-SHA256(per-process random key, ipKeyInput(ip))`, held in memory only. The IP itself is
+  never stored. `ipKeyInput` keeps an IPv4 address exact (an IPv4-mapped `::ffff:a.b.c.d` is that IPv4 address) and
+  takes an IPv6 address as its /64 prefix in one spelling (`2001:db8:0:1::/64`), since one subscriber usually holds a
+  whole /64 and could otherwise spread over 2^64 keys.
+
+Expiry and windows are half-open: a code claimed at `t` is live while `now < t + 600 000`; a room expires when
+`now - lastActive >= idleMs` or `now - createdAt >= maxLifeMs`; a miss, a creation or a claim counts while
+`now - at < window`.
+
+A file is one scenario:
+
+```json
+{ "description": "...", "options": { "maxRooms": 2 },
+  "steps": [{ "at": 0, "op": "open", "room": "RoomOneAAAAAAAAAAAAAAA", "role": "tv", "peer": "tv", "expect": "ok" }] }
+```
+
+`options` (optional) overrides `createRooms`'s `idleMs`, `maxLifeMs` or `maxRooms`. A runner builds one rooms, one
+codes and one limits instance and one ipKey function per file, sets the clock to each step's `at` (ms, never
+decreasing), runs the step and compares its result with `expect` (deep equality) when the step has one:
+
+| `op` | Arguments | `expect` |
+| --- | --- | --- |
+| `open` | `room`, `role` (`tv`/`ctl`), `peer` | `"ok"`, `"no-room"`, `"busy"`, `"full"` or `"bad-room-id"` |
+| `leave` | `room`, `peer` | `{ "notify": peer or null }` |
+| `touch` | `room` | none |
+| `has` | `room` | `true` while the room exists and has not expired |
+| `forward` | `room`, `from` | the other peer, or `null` |
+| `sweep` | none | `{ "expired": [{ "roomId", "peers" }] }`, rooms in creation order, peers tv first; also sweeps codes and limits |
+| `claim` | `room`, `random`: the values `random6` returns, in order (all must be used) | `{ "code", "expiresIn": 600 }` |
+| `revoke` | `room` | none |
+| `lookup` | `code`, `ip` | `{ "roomId" }`, `"not-found"` or `"rate-limited"` |
+| `create` | `ip` | `allowRoomCreate`: `true` or `false` |
+| `claimAllowed` | `ip` | `allowCodeClaim`: `true` or `false` |
+| `socket` | `ip`, `action`: `"open"` (`allowSocket`, expects a boolean) or `"release"` (`releaseSocket`) | as stated |
+
+Peers are opaque names. `ip` goes through the runner's ipKey function first, so the logic only ever sees an ipKey.
+The IPs are documentation addresses (`198.51.100.x`, `203.0.113.x`, `2001:db8::/32`).
+
+### The relay's wire
+
+Not a fixture: what the TV and the phone see of the relay (`relay/server.ts`, tested by `relay/server.test.ts`).
+
+- `GET /relay/v1/room/<roomId>?role=tv|ctl` upgrades to a WebSocket. Two caps refuse before the handshake, with a
+  plain HTTP answer: `429` past 8 open sockets per IP, `503` past the relay's open sockets over all clients (4000,
+  `RELAY_MAX_SOCKETS`). Any other refusal upgrades, then closes with:
+  `4400` bad room id, role or message, `4404` no room (a `ctl`), `4409` busy, `4429` rate-limited (20 new rooms per
+  IP per hour; a `tv` joining its existing room is not a new room), `4503` full (1000 rooms), `4408` idle or
+  max life, `4410` the other peer left and did not come back within 60 s (checked by the 30 s sweep, so 60 to 90 s;
+  the room then ends), `4413` the other peer is not reading: a frame that would take its unsent queue past 4 MiB
+  closes the sender and is dropped (so a room never buffers more than 4 MiB per direction). A frame over 1 MiB + 1 KiB
+  closes `1009`. Once the relay closes a peer, it ignores that peer's later frames, and the other peer gets `peer-left`
+  at once.
+- Every 30 s the relay pings each peer; one that has not answered the previous ping (a half-open socket) is dropped,
+  so its slot frees within about a minute and a phone can rejoin.
+- When a peer joins and the other is there, both get `{"relay":"peer-joined"}`. When a peer leaves, the other gets
+  `{"relay":"peer-left"}`; the slot stays open for 60 s.
+- Binary frames, and text frames that start with `{"e2e"`, go to the other peer exactly as sent (dropped while it is
+  away). The only other text frames allowed are the `tv`'s `{"relay":"claim-code"}`, answered with
+  `{"relay":"code","code":"123456","expiresIn":600}` (or `{"relay":"rate-limited"}` past 10 claims per 10 min; the
+  socket stays open), and `{"relay":"void-code"}` («Показать QR»), which voids the room's code without an answer.
+  Anything else closes `4400`. A room's code is also voided when the room ends.
+- `GET /relay/v1/code/<code>` answers `200 {"roomId"}`, `404 {"error":"not-found"}` or `429 {"error":"rate-limited"}`,
+  always with `Cache-Control: no-store`. `GET /relay/healthz` answers `200 {"ok":true}`.
+- The client IP is the rightmost `X-Forwarded-For` entry only on a connection from a trusted proxy
+  (`RELAY_TRUSTED_PROXIES`, IPs or CIDR ranges; loopback by default, so a proxy in a docker container needs its bridge
+  address there); otherwise it is the socket address. A request target that does not parse answers `400`, or drops
+  the connection on an upgrade.

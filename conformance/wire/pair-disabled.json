@@ -1,4 +1,5 @@
 {
+  "profiles": ["bridge"],
   "description": "One bridge run issues at most 20 codes; after that pairStart is pair-disabled for every Origin until restart (re-showing a live code is not a new one). The token still works.",
   "pairCodes": ["200000", "200007", "200014", "200021", "200028", "200035", "200042", "200049", "200056", "200063", "200070", "200077", "200084", "200091", "200098", "200105", "200112", "200119", "200126", "200133"],
   "steps": [
@@ -50,6 +51,6 @@
     {"send": {"id": 23, "type": "pairFinish", "code": "200133"}, "expect": {"id": 23, "ok": false, "error": "pair-expired"}},
     {"advanceMs": 3600000},
     {"send": {"id": 24, "type": "pairStart"}, "expect": {"id": 24, "ok": false, "error": "pair-disabled"}},
-    {"send": {"id": 25, "token": "$token", "type": "hello"}, "expect": {"id": 25, "ok": true, "result": {"version": "$any", "protocol": 2, "features": ["installApk"], "adb": true, "paired": true}}}
+    {"send": {"id": 25, "token": "$token", "type": "hello"}, "expect": {"id": 25, "ok": true, "result": {"version": "$any", "protocol": 3, "features": ["installApk", "allowlist"], "adb": true, "paired": true}}}
   ]
 }

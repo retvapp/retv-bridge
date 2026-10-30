@@ -1,0 +1,19 @@
+# cargo audit settings for the CI step (.github/workflows/ci.yml, `cargo audit --deny warnings`).
+# Every ignore below is a warning, not a vulnerability, and comes only through Tauri's Linux desktop stack (GTK and
+# D-Bus). ReTV Bridge ships for macOS and Windows, where none of these crates is built. Re-check each one when Tauri
+# moves to gtk-rs 0.19+ / zbus 6, and drop the line once `cargo audit` no longer reports it.
+[advisories]
+ignore = [
+    # proc-macro-error 1.0.4 is unmaintained. Build-time only: glib-macros (gtk-rs 0.18) <- gtk <- tray-icon <- tauri.
+    "RUSTSEC-2024-0370",
+    # glib 0.18.5: unsound VariantStrIter impls. Linux only: atk/gtk <- libappindicator <- tray-icon <- tauri; we never
+    # use glib::VariantStrIter.
+    "RUSTSEC-2024-0429",
+    # zvariant 5.15.1 is unmaintained. Linux only: zbus <- notify-rust, tauri-plugin-notification, -opener,
+    # -single-instance.
+    "RUSTSEC-2026-0370",
+    # zbus_names 4.3.5 is unmaintained. Linux only, same path as zvariant.
+    "RUSTSEC-2026-0371",
+    # zvariant_derive 5.15.1 is unmaintained. Linux only, same path as zvariant.
+    "RUSTSEC-2026-0372",
+]

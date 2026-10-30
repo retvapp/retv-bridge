@@ -1,0 +1,22 @@
+{
+  "description": "An expired room is gone at once, before any sweep removes it: has is false, touch does not renew it, forward gives null and a ctl gets no-room (open never resurrects it). The full check expires such rooms first, so an expired room never holds a slot. The next sweep still reports every room expired this way (before the ones it expires itself), with its peers, so the server can close them.",
+  "options": {"maxRooms": 2},
+  "steps": [
+    {"at":0,"op":"open","room":"RoomOneAAAAAAAAAAAAAAA","role":"tv","peer":"tv-1","expect":"ok"},
+    {"at":0,"op":"has","room":"RoomOneAAAAAAAAAAAAAAA","expect":true},
+    {"at":0,"op":"has","room":"RoomTwoAAAAAAAAAAAAAAA","expect":false},
+    {"at":1000,"op":"open","room":"RoomTwoAAAAAAAAAAAAAAA","role":"tv","peer":"tv-2","expect":"ok"},
+    {"at":1799999,"op":"has","room":"RoomOneAAAAAAAAAAAAAAA","expect":true},
+    {"at":1800000,"op":"has","room":"RoomOneAAAAAAAAAAAAAAA","expect":false},
+    {"at":1800000,"op":"touch","room":"RoomOneAAAAAAAAAAAAAAA"},
+    {"at":1800000,"op":"forward","room":"RoomOneAAAAAAAAAAAAAAA","from":"tv-1","expect":null},
+    {"at":1800000,"op":"has","room":"RoomTwoAAAAAAAAAAAAAAA","expect":true},
+    {"at":1800000,"op":"open","room":"RoomThreeAAAAAAAAAAAAA","role":"tv","peer":"tv-3","expect":"ok"},
+    {"at":1800000,"op":"open","room":"RoomOneAAAAAAAAAAAAAAA","role":"ctl","peer":"phone-1","expect":"no-room"},
+    {"at":1800000,"op":"open","room":"RoomOneAAAAAAAAAAAAAAA","role":"tv","peer":"tv-4","expect":"full"},
+    {"at":1801000,"op":"sweep","expect":{"expired":[{"roomId":"RoomOneAAAAAAAAAAAAAAA","peers":["tv-1"]},{"roomId":"RoomTwoAAAAAAAAAAAAAAA","peers":["tv-2"]}]}},
+    {"at":1801000,"op":"sweep","expect":{"expired":[]}},
+    {"at":1801000,"op":"open","room":"RoomOneAAAAAAAAAAAAAAA","role":"tv","peer":"tv-4","expect":"ok"},
+    {"at":1801000,"op":"has","room":"RoomOneAAAAAAAAAAAAAAA","expect":true}
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "profiles": ["bridge", "helper"],
+  "description": "Protocol v3 (allowlist): run takes only the command shapes of PROTOCOL.md's allow-list. Anything else is command-not-allowed, reaches nothing and leaves the socket open. An allowed command runs as the line rebuilt from its checked words (quotes only where needed). The serial and the cmd type are checked first.",
+  "adb": {
+    "devices": {
+      "$tvSerial": {
+        "model": "MiTV-AYFR0",
+        "shell": {
+          "settings put global animator_duration_scale 1.0": {"stdout": "", "stderr": "", "exitCode": 0},
+          "am start -a android.intent.action.VIEW -d 'market://details?id=ru.kinopoisk.tv'": {"stdout": "Starting: Intent\n", "stderr": "", "exitCode": 0},
+          "pm enable --user 0 'com.x.y/.Outer$Inner'": {"stdout": "Component com.x.y/.Outer$Inner new state: enabled\n", "stderr": "", "exitCode": 0}
+        }
+      }
+    }
+  },
+  "steps": [
+    {"open": {"origin": "https://retv.app", "host": "$host"}, "expectStatus": 101},
+    {"send": {"id": 1, "token": "$token", "type": "connect", "ip": "$tvIp"}, "expect": {"id": 1, "ok": true, "result": {"serial": "$tvSerial", "model": "MiTV-AYFR0"}}},
+    {"send": {"id": 2, "token": "$token", "type": "run", "serial": "$tvSerial", "cmd": "echo hi"}, "expect": {"id": 2, "ok": false, "error": "command-not-allowed"}},
+    {"send": {"id": 3, "token": "$token", "type": "run", "serial": "$tvSerial", "cmd": "pm install -r --user current /data/local/tmp/retv-home.apk"}, "expect": {"id": 3, "ok": false, "error": "command-not-allowed"}},
+    {"send": {"id": 4, "token": "$token", "type": "run", "serial": "$tvSerial", "cmd": "getprop ro.product.model; reboot"}, "expect": {"id": 4, "ok": false, "error": "command-not-allowed"}},
+    {"send": {"id": 5, "token": "$token", "type": "run", "serial": "$tvSerial", "cmd": "pm grant --user 0 com.evil.app android.permission.READ_LOGS"}, "expect": {"id": 5, "ok": false, "error": "command-not-allowed"}},
+    {"send": {"id": 6, "token": "$token", "type": "run", "serial": "$tvSerial", "cmd": "settings put global animator_duration_scale '1.0'"}, "expect": {"id": 6, "ok": true, "result": {"exitCode": 0, "stdout": "", "stderr": ""}}},
+    {"send": {"id": 7, "token": "$token", "type": "run", "serial": "$tvSerial", "cmd": "am start -a android.intent.action.VIEW -d market://details?id=ru.kinopoisk.tv"}, "expect": {"id": 7, "ok": true, "result": {"exitCode": 0, "stdout": "Starting: Intent\n", "stderr": ""}}},
+    {"send": {"id": 8, "token": "$token", "type": "run", "serial": "$tvSerial", "cmd": "pm enable --user 0 'com.x.y/.Outer$Inner'"}, "expect": {"id": 8, "ok": true, "result": {"exitCode": 0, "stdout": "Component com.x.y/.Outer$Inner new state: enabled\n", "stderr": ""}}},
+    {"send": {"id": 9, "token": "$token", "type": "run", "serial": "192.168.1.9:5555", "cmd": "echo hi"}, "expect": {"id": 9, "ok": false, "error": "unknown-serial"}},
+    {"send": {"id": 10, "token": "$token", "type": "run", "serial": "$tvSerial", "cmd": 42}, "expect": {"id": 10, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 11, "token": "$token", "type": "run", "serial": "$tvSerial", "cmd": "dumpsys meminfo"}, "expect": {"id": 11, "ok": true, "result": {"exitCode": 127, "stdout": "", "stderr": ""}}},
+    {"expectAdb": {
+      "ran": [
+        ["$tvSerial", "settings put global animator_duration_scale 1.0"],
+        ["$tvSerial", "am start -a android.intent.action.VIEW -d 'market://details?id=ru.kinopoisk.tv'"],
+        ["$tvSerial", "pm enable --user 0 'com.x.y/.Outer$Inner'"],
+        ["$tvSerial", "dumpsys meminfo"]
+      ],
+      "pushed": {},
+      "closed": []
+    }}
+  ]
+}

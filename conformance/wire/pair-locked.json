@@ -1,4 +1,5 @@
 {
+  "profiles": ["bridge"],
   "description": "Wrong codes report attemptsLeft; the fifth locks start and finish for 30 s with retryIn, on every socket; the socket stays open; after the lock a new code works.",
   "pairCodes": ["482917", "135790"],
   "steps": [

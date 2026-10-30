@@ -1,19 +1,20 @@
 {
+  "profiles": ["bridge"],
   "description": "pairStart shows a code in the bridge window; pairFinish with it returns the session token once; the token then works on the same socket. A token on pairStart / pairFinish (stale, valid or not a string) is ignored and never causes bad-token.",
   "pairCodes": ["482917", "135790", "246801"],
   "steps": [
     {"open": {"origin": "http://127.0.0.1:5180", "host": "$host"}, "expectStatus": 101},
-    {"send": {"id": 1, "type": "hello"}, "expect": {"id": 1, "ok": true, "result": {"version": "$any", "protocol": 2, "features": ["installApk"], "adb": true, "paired": false}}},
+    {"send": {"id": 1, "type": "hello"}, "expect": {"id": 1, "ok": true, "result": {"version": "$any", "protocol": 3, "features": ["installApk", "allowlist"], "adb": true, "paired": false}}},
     {"send": {"id": 2, "type": "pairStart"}, "expect": {"id": 2, "ok": true, "result": {"expiresIn": 120}}},
     {"send": {"id": 3, "type": "pairFinish", "code": "$code"}, "expect": {"id": 3, "ok": true, "result": {"token": "$token"}}},
     {"send": {"id": 4, "type": "pairFinish", "code": "482917"}, "expect": {"id": 4, "ok": false, "error": "pair-expired"}},
-    {"send": {"id": 5, "token": "$token", "type": "hello"}, "expect": {"id": 5, "ok": true, "result": {"version": "$any", "protocol": 2, "features": ["installApk"], "adb": true, "paired": true}}},
+    {"send": {"id": 5, "token": "$token", "type": "hello"}, "expect": {"id": 5, "ok": true, "result": {"version": "$any", "protocol": 3, "features": ["installApk", "allowlist"], "adb": true, "paired": true}}},
     {"send": {"id": 6, "token": "$token", "type": "discover"}, "expect": {"id": 6, "ok": true, "result": {"tvs": []}}},
     {"send": {"id": 7, "token": "stale", "type": "pairStart"}, "expect": {"id": 7, "ok": true, "result": {"expiresIn": 120}}},
     {"send": {"id": 8, "token": "stale", "type": "pairFinish", "code": "$code"}, "expect": {"id": 8, "ok": true, "result": {"token": "$token"}}},
     {"send": {"id": 9, "token": "$token", "type": "pairStart"}, "expect": {"id": 9, "ok": true, "result": {"expiresIn": 120}}},
     {"send": {"id": 10, "token": 42, "type": "pairFinish", "code": "000000"}, "expect": {"id": 10, "ok": false, "error": "bad-code", "result": {"attemptsLeft": 4}}},
     {"send": {"id": 11, "token": "stale", "type": "pairFinish", "code": "$code"}, "expect": {"id": 11, "ok": true, "result": {"token": "$token"}}},
-    {"send": {"id": 12, "token": "stale", "type": "hello"}, "expect": {"id": 12, "ok": true, "result": {"version": "$any", "protocol": 2, "features": ["installApk"], "adb": true, "paired": false}}}
+    {"send": {"id": 12, "token": "stale", "type": "hello"}, "expect": {"id": 12, "ok": true, "result": {"version": "$any", "protocol": 3, "features": ["installApk", "allowlist"], "adb": true, "paired": false}}}
   ]
 }

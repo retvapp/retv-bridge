@@ -1,0 +1,19 @@
+{
+  "description": "One peer per role: a second ctl or a second tv gets busy and changes nothing. The refused peer's leave is a no-op, and the first pair keeps forwarding.",
+  "steps": [
+    {"at":0,"op":"open","room":"RoomOneAAAAAAAAAAAAAAA","role":"tv","peer":"tv","expect":"ok"},
+    {"at":0,"op":"open","room":"RoomOneAAAAAAAAAAAAAAA","role":"ctl","peer":"phone","expect":"ok"},
+    {"at":5,"op":"open","room":"RoomOneAAAAAAAAAAAAAAA","role":"ctl","peer":"intruder","expect":"busy"},
+    {"at":5,"op":"open","room":"RoomOneAAAAAAAAAAAAAAA","role":"tv","peer":"tv-b","expect":"busy"},
+    {"at":5,"op":"open","room":"RoomOneAAAAAAAAAAAAAAA","role":"ctl","peer":"phone","expect":"busy"},
+    {"at":5,"op":"forward","room":"RoomOneAAAAAAAAAAAAAAA","from":"tv","expect":"phone"},
+    {"at":5,"op":"forward","room":"RoomOneAAAAAAAAAAAAAAA","from":"intruder","expect":null},
+    {"at":6,"op":"leave","room":"RoomOneAAAAAAAAAAAAAAA","peer":"intruder","expect":{"notify":null}},
+    {"at":6,"op":"leave","room":"RoomOneAAAAAAAAAAAAAAA","peer":"tv-b","expect":{"notify":null}},
+    {"at":6,"op":"forward","room":"RoomOneAAAAAAAAAAAAAAA","from":"phone","expect":"tv"},
+    {"at":6,"op":"forward","room":"RoomOneAAAAAAAAAAAAAAA","from":"tv","expect":"phone"},
+    {"at":7,"op":"leave","room":"RoomOneAAAAAAAAAAAAAAA","peer":"phone","expect":{"notify":"tv"}},
+    {"at":8,"op":"open","room":"RoomOneAAAAAAAAAAAAAAA","role":"ctl","peer":"intruder","expect":"ok"},
+    {"at":8,"op":"forward","room":"RoomOneAAAAAAAAAAAAAAA","from":"tv","expect":"intruder"}
+  ]
+}

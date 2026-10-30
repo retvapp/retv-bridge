@@ -1,4 +1,5 @@
 {
+  "profiles": ["bridge"],
   "description": "Any request other than hello, pairStart and pairFinish without the session token is answered bad-token and the socket closes with 1008, before anything reaches adb; the socket's devices close with it.",
   "adb": {"devices": {"192.168.1.5:5555": {"model": "MiTV-AYFR0"}}},
   "steps": [
@@ -16,6 +17,15 @@
     {"socket": 3, "send": {"id": 1, "token": "$token", "type": "connect", "ip": "192.168.1.5", "port": 5555}, "expect": {"id": 1, "ok": true, "result": {"serial": "192.168.1.5:5555", "model": "MiTV-AYFR0"}}},
     {"socket": 3, "send": {"id": 2, "token": "test-token-1234", "type": "run", "serial": "192.168.1.5:5555", "cmd": "echo hi"}, "expect": {"id": 2, "ok": false, "error": "bad-token"}},
     {"socket": 3, "expectClose": true, "closeCode": 1008},
-    {"expectAdb": {"connected": ["192.168.1.5:5555"], "ran": [], "closed": ["192.168.1.5:5555"]}}
+    {"expectAdb": {"connected": ["192.168.1.5:5555"], "ran": [], "closed": ["192.168.1.5:5555"]}},
+    {"socket": 4, "open": {"origin": "http://127.0.0.1:5180", "host": "$host"}, "expectStatus": 101},
+    {"socket": 4, "send": {"id": 1, "token": "$token", "type": "connect", "ip": "192.168.1.5", "port": 5555}, "expect": {"id": 1, "ok": true, "result": {"serial": "192.168.1.5:5555", "model": "MiTV-AYFR0"}}},
+    {"socket": 4, "send": {"id": 2, "token": "wrong", "type": "writeBytes", "serial": "192.168.1.5:5555", "path": "/data/local/tmp/retv-home.apk", "offset": 0, "total": 1, "data": "eA=="}, "expect": {"id": 2, "ok": false, "error": "bad-token"}},
+    {"socket": 4, "expectClose": true, "closeCode": 1008},
+    {"socket": 5, "open": {"origin": "https://retv.app", "host": "$host"}, "expectStatus": 101},
+    {"socket": 5, "send": {"id": 1, "token": "$token", "type": "connect", "ip": "192.168.1.5", "port": 5555}, "expect": {"id": 1, "ok": true, "result": {"serial": "192.168.1.5:5555", "model": "MiTV-AYFR0"}}},
+    {"socket": 5, "send": {"id": 2, "token": "wrong", "type": "installApk", "serial": "192.168.1.5:5555", "url": "https://retv.app/downloads/retv-home-1.0.1-10001.apk", "sha256": "5702eec1ac8168696925fa05d9c3c0d9cc46153618daebfdad8a551907968dea"}, "expect": {"id": 2, "ok": false, "error": "bad-token"}},
+    {"socket": 5, "expectClose": true, "closeCode": 1008},
+    {"expectAdb": {"connected": ["192.168.1.5:5555", "192.168.1.5:5555", "192.168.1.5:5555"], "ran": [], "pushed": {}, "closed": ["192.168.1.5:5555", "192.168.1.5:5555", "192.168.1.5:5555"]}}
   ]
 }

@@ -1,0 +1,28 @@
+{
+  "description": "claim gives the room a fresh random 6-digit code for 600 s; a room has one live code, and a new claim voids the old one. A hit consumes the code. A draw that collides with another room's live code is redrawn. revoke voids a room's code (the TV went back to the QR, or the room ended). Each claim lists in random the values random6 returns, in order; a runner fails if any is left unused.",
+  "steps": [
+    {"at":0,"op":"claim","room":"RoomOneAAAAAAAAAAAAAAA","random":["042917"],"expect":{"code":"042917","expiresIn":600}},
+    {"at":1000,"op":"lookup","code":"042917","ip":"198.51.100.7","expect":{"roomId":"RoomOneAAAAAAAAAAAAAAA"}},
+    {"at":1000,"op":"lookup","code":"042917","ip":"198.51.100.8","expect":"not-found"},
+    {"at":2000,"op":"claim","room":"RoomOneAAAAAAAAAAAAAAA","random":["135790"],"expect":{"code":"135790","expiresIn":600}},
+    {"at":3000,"op":"claim","room":"RoomOneAAAAAAAAAAAAAAA","random":["246801"],"expect":{"code":"246801","expiresIn":600}},
+    {"at":3000,"op":"lookup","code":"135790","ip":"2001:db8::42","expect":"not-found"},
+    {"at":4000,"op":"lookup","code":"246801","ip":"198.51.100.7","expect":{"roomId":"RoomOneAAAAAAAAAAAAAAA"}},
+    {"at":5000,"op":"claim","room":"RoomTwoAAAAAAAAAAAAAAA","random":["555555"],"expect":{"code":"555555","expiresIn":600}},
+    {"at":5000,"op":"claim","room":"Room_3-AAAAAAAAAAAAAAA","random":["555555","555555","777777"],"expect":{"code":"777777","expiresIn":600}},
+    {"at":5000,"op":"lookup","code":"777777","ip":"198.51.100.7","expect":{"roomId":"Room_3-AAAAAAAAAAAAAAA"}},
+    {"at":5000,"op":"lookup","code":"555555","ip":"198.51.100.7","expect":{"roomId":"RoomTwoAAAAAAAAAAAAAAA"}},
+    {"at":10000,"op":"claim","room":"RoomFourAAAAAAAAAAAAAA","random":["900001"],"expect":{"code":"900001","expiresIn":600}},
+    {"at":10000,"op":"claim","room":"RoomFiveAAAAAAAAAAAAAA","random":["900002"],"expect":{"code":"900002","expiresIn":600}},
+    {"at":609999,"op":"lookup","code":"900002","ip":"198.51.100.7","expect":{"roomId":"RoomFiveAAAAAAAAAAAAAA"}},
+    {"at":610000,"op":"lookup","code":"900001","ip":"198.51.100.8","expect":"not-found"},
+    {"at":610000,"op":"claim","room":"RoomSixAAAAAAAAAAAAAAA","random":["900001"],"expect":{"code":"900001","expiresIn":600}},
+    {"at":610000,"op":"lookup","code":"900001","ip":"198.51.100.7","expect":{"roomId":"RoomSixAAAAAAAAAAAAAAA"}},
+    {"at":620000,"op":"claim","room":"RoomOneAAAAAAAAAAAAAAA","random":["314159"],"expect":{"code":"314159","expiresIn":600}},
+    {"at":620000,"op":"revoke","room":"RoomOneAAAAAAAAAAAAAAA"},
+    {"at":620000,"op":"lookup","code":"314159","ip":"2001:db8::42","expect":"not-found"},
+    {"at":620000,"op":"claim","room":"RoomTwoAAAAAAAAAAAAAAA","random":["314159"],"expect":{"code":"314159","expiresIn":600}},
+    {"at":620000,"op":"revoke","room":"RoomOneAAAAAAAAAAAAAAA"},
+    {"at":620000,"op":"lookup","code":"314159","ip":"198.51.100.7","expect":{"roomId":"RoomTwoAAAAAAAAAAAAAAA"}}
+  ]
+}

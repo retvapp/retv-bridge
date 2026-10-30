@@ -1,0 +1,28 @@
+{
+  "profiles": ["helper"],
+  "description": "Helper profile: malformed messages get bad-request (id -1 when there is no usable id) and the session stays, as on the bridge. A message of exactly 1 MiB is still read (not JSON: bad-request); one over 1 MiB closes the session.",
+  "adb": {
+    "devices": {"self": {"model": "MiTV-AYFR0"}},
+    "helper": {"sdk": 30, "release": "11", "classicPort": true, "rsa": "allow"}
+  },
+  "steps": [
+    {"sendRaw": "{not json", "expect": {"id": -1, "ok": false, "error": "bad-request"}},
+    {"sendRaw": "[1, 2]", "expect": {"id": -1, "ok": false, "error": "bad-request"}},
+    {"sendRaw": "42", "expect": {"id": -1, "ok": false, "error": "bad-request"}},
+    {"send": {"type": "hello"}, "expect": {"id": -1, "ok": false, "error": "bad-request"}},
+    {"send": {"id": null, "type": "hello"}, "expect": {"id": -1, "ok": false, "error": "bad-request"}},
+    {"send": {"id": {"n": 1}, "type": "hello"}, "expect": {"id": -1, "ok": false, "error": "bad-request"}},
+    {"send": {"id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "type": "hello"}, "expect": {"id": -1, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 1, "type": "noSuchType"}, "expect": {"id": 1, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 2}, "expect": {"id": 2, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 3, "type": "adbStart", "method": "classic"}, "expect": {"id": 3, "ok": true, "result": {"method": "classic"}}},
+    {"send": {"id": 4, "type": "connect", "ip": "127.0.0.1"}, "expect": {"id": 4, "ok": true, "result": {"serial": "self", "model": "MiTV-AYFR0"}}},
+    {"send": {"id": 5, "type": "run", "serial": "self", "cmd": ""}, "expect": {"id": 5, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 6, "type": "run", "serial": "self"}, "expect": {"id": 6, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 7, "type": "writeFile", "serial": "self", "path": "/sdcard/ReTV/a.json", "data": 5}, "expect": {"id": 7, "ok": false, "error": "bad-request"}},
+    {"sendOversize": 1048576, "expect": {"id": -1, "ok": false, "error": "bad-request"}},
+    {"send": {"id": 8, "type": "hello"}, "expect": {"id": 8, "ok": true, "result": {"version": "$any", "protocol": 3, "features": ["installApk", "allowlist", "helper"], "adb": true, "paired": true}}},
+    {"expectAdb": {"ran": [], "pushed": {}}},
+    {"sendOversize": 1048577, "expectClose": true}
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "description": "5 misses from one IP (its ipKey) within 10 min block that IP for 10 min: the 5th miss still answers not-found, and every lookup in the block, a right code included, answers rate-limited without extending it. A malformed or expired code is a miss too. Other IPs are not affected.",
+  "steps": [
+    {"at":0,"op":"claim","room":"RoomOneAAAAAAAAAAAAAAA","random":["482017"],"expect":{"code":"482017","expiresIn":600}},
+    {"at":0,"op":"lookup","code":"000000","ip":"198.51.100.7","expect":"not-found"},
+    {"at":0,"op":"lookup","code":"000000","ip":"2001:db8::42","expect":"not-found"},
+    {"at":1000,"op":"lookup","code":"000001","ip":"198.51.100.7","expect":"not-found"},
+    {"at":2000,"op":"lookup","code":"000002","ip":"198.51.100.7","expect":"not-found"},
+    {"at":3000,"op":"lookup","code":"000003","ip":"198.51.100.7","expect":"not-found"},
+    {"at":4000,"op":"lookup","code":"000004","ip":"198.51.100.7","expect":"not-found"},
+    {"at":5000,"op":"lookup","code":"482017","ip":"198.51.100.7","expect":"rate-limited"},
+    {"at":5000,"op":"lookup","code":"000005","ip":"198.51.100.8","expect":"not-found"},
+    {"at":100000,"op":"lookup","code":"000000","ip":"2001:db8::42","expect":"not-found"},
+    {"at":200000,"op":"lookup","code":"000000","ip":"2001:db8::42","expect":"not-found"},
+    {"at":300000,"op":"lookup","code":"000006","ip":"198.51.100.7","expect":"rate-limited"},
+    {"at":300000,"op":"claim","room":"RoomOneAAAAAAAAAAAAAAA","random":["613370"],"expect":{"code":"613370","expiresIn":600}},
+    {"at":300000,"op":"lookup","code":"000000","ip":"2001:db8::42","expect":"not-found"},
+    {"at":600000,"op":"lookup","code":"000000","ip":"2001:db8::42","expect":"not-found"},
+    {"at":600001,"op":"lookup","code":"000000","ip":"2001:db8::42","expect":"not-found"},
+    {"at":600002,"op":"lookup","code":"000000","ip":"2001:db8::42","expect":"rate-limited"},
+    {"at":603999,"op":"lookup","code":"613370","ip":"198.51.100.7","expect":"rate-limited"},
+    {"at":604000,"op":"lookup","code":"613370","ip":"198.51.100.7","expect":{"roomId":"RoomOneAAAAAAAAAAAAAAA"}},
+    {"at":700000,"op":"lookup","code":"12a456","ip":"203.0.113.20","expect":"not-found"},
+    {"at":700000,"op":"lookup","code":"1234567","ip":"203.0.113.20","expect":"not-found"},
+    {"at":700000,"op":"lookup","code":"12345","ip":"203.0.113.20","expect":"not-found"},
+    {"at":700000,"op":"lookup","code":"","ip":"203.0.113.20","expect":"not-found"},
+    {"at":700000,"op":"lookup","code":"482017","ip":"203.0.113.20","expect":"not-found"},
+    {"at":700000,"op":"lookup","code":"000000","ip":"203.0.113.20","expect":"rate-limited"},
+    {"at":700000,"op":"lookup","code":"000000","ip":"203.0.113.21","expect":"not-found"},
+    {"at":700000,"op":"lookup","code":"000000","ip":"203.0.113.22","expect":"not-found"}
+  ]
+}

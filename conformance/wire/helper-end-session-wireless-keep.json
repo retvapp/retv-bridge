@@ -1,0 +1,15 @@
+{
+  "profiles": ["helper"],
+  "description": "Helper profile: endSession {debugging:\"keep\"} after a wireless session still turns Wireless debugging off (every session ends with it off, spec §3.2) with settings put global adb_wifi_enabled 0, so it answers the truth, {debugging:\"off\"}, and closes the session.",
+  "adb": {
+    "pairCode": "482917",
+    "devices": {"self": {"model": "Chromecast"}},
+    "helper": {"sdk": 34, "release": "14", "classicPort": false, "pairingService": true, "wirelessConnect": true, "wirelessPaired": false}
+  },
+  "steps": [
+    {"send": {"id": 1, "type": "adbPair", "code": "482917"}, "expect": {"id": 1, "ok": true, "result": {"method": "wireless"}}},
+    {"send": {"id": 2, "type": "endSession", "debugging": "keep"}, "expect": {"id": 2, "ok": true, "result": {"debugging": "off"}}},
+    {"expectClose": true},
+    {"expectAdb": {"ran": [["self", "settings put global adb_wifi_enabled 0"]]}}
+  ]
+}

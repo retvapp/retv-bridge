@@ -4,10 +4,11 @@
 /// The bridge listens on loopback only.
 pub const BRIDGE_HOST: &str = "127.0.0.1";
 pub const BRIDGE_PORT: u16 = 5577;
-/// Protocol v2 adds `installApk` (announced in `hello`'s `features`).
-pub const PROTOCOL_VERSION: u32 = 2;
-/// What `hello` announces on top of protocol v1.
-pub const FEATURES: &[&str] = &["installApk"];
+/// Protocol v2 adds `installApk`; v3 the `run` allow-list (both announced in `hello`'s `features`).
+pub const PROTOCOL_VERSION: u32 = 3;
+/// What `hello` announces on top of protocol v1: `installApk` (v2) and `allowlist` (v3: `run` takes only
+/// the command shapes in `commands.rs`, anything else is `command-not-allowed`).
+pub const FEATURES: &[&str] = &["installApk", "allowlist"];
 
 /// Pages allowed to talk to the bridge (exact `Origin` header match).
 pub const ALLOWED_ORIGINS: &[&str] = &[
@@ -24,7 +25,7 @@ pub const ALLOWED_HOSTS: &[&str] = &["127.0.0.1", "localhost"];
 
 /// Largest accepted WebSocket message; the socket closes on anything bigger.
 pub const MAX_MESSAGE_BYTES: usize = 1024 * 1024;
-/// Largest shell command accepted in one `run`.
+/// Largest shell command accepted in one `run` (longer is `bad-request`; the allow-list then decides).
 pub const MAX_COMMAND_CHARS: usize = 256 * 1024;
 /// `writeFile` may only write below this directory on the TV.
 pub const DEVICE_WRITE_DIR: &str = "/sdcard/ReTV/";

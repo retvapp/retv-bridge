@@ -1,0 +1,14 @@
+{
+  "en": [
+    "First release for macOS",
+    "Lets the ReTV site set up an Android TV on your home network",
+    "Runs in the menu bar and accepts connections only from this computer",
+    "Updates itself when a new version is out"
+  ],
+  "ru": [
+    "Первый выпуск для macOS",
+    "Позволяет сайту ReTV настроить Android TV в вашей домашней сети",
+    "Работает в строке меню и принимает подключения только с этого компьютера",
+    "Обновляется сам, когда выходит новая версия"
+  ]
+}
