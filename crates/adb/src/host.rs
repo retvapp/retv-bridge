@@ -93,7 +93,7 @@ impl AdbHost {
     /// A `FAIL` text as its transport code; unrecognised text is logged.
     fn fail_text(&self, context: &str, msg: &str) -> TransportError {
         match map_adb_failure(msg) {
-            TransportError::Internal => self.internal(format!("{context}: adb said {msg:?}")),
+            TransportError::Internal => self.internal(fail_detail(context, msg)),
             code => code,
         }
     }
@@ -350,4 +350,36 @@ pub(crate) async fn write_all_idle(
         }
     }
     Ok(())
+}
+
+/// The log line of an unrecognised `FAIL`: the request (e.g. `shell,v2,raw:<line>`) and adb's text, with ReTV Home's
+/// one-time sign-in code hidden (`--es code <hidden>`), so no bridge log ever holds it.
+fn fail_detail(context: &str, msg: &str) -> String {
+    use retv_bridge_core::commands::redact_secrets;
+    format!(
+        "{}: adb said {:?}",
+        redact_secrets(context),
+        redact_secrets(msg)
+    )
+}
+
+#[cfg(test)]
+mod fail_detail_tests {
+    use super::fail_detail;
+
+    #[test]
+    fn hides_the_sign_in_code() {
+        let code = "Ab0_-".repeat(8) + "xyz";
+        let req = format!("shell,v2,raw:am broadcast --user 0 -n app.retv.home/.data.SiteSignInReceiver -a app.retv.home.action.SITE_SIGN_IN -f 32 --es cell world --es code {code}");
+        let line = fail_detail(&req, &format!("closed: --es code {code}"));
+        assert!(!line.contains(&code), "{line}");
+        assert!(
+            line.contains("--es cell world --es code <hidden>: adb said"),
+            "{line}"
+        );
+        assert_eq!(
+            fail_detail("host:version", "nope"),
+            "host:version: adb said \"nope\""
+        );
+    }
 }

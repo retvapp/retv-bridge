@@ -8,7 +8,8 @@ pub const BRIDGE_PORT: u16 = 5577;
 pub const PROTOCOL_VERSION: u32 = 3;
 /// What `hello` announces on top of protocol v1: `installApk` (v2) and `allowlist` (v3: `run` takes only
 /// the command shapes in `commands.rs`, anything else is `command-not-allowed`).
-pub const FEATURES: &[&str] = &["installApk", "allowlist"];
+/// `siteSignIn`: the allow-list takes ReTV Home's site sign-in broadcast and never logs its one-time code.
+pub const FEATURES: &[&str] = &["installApk", "allowlist", "siteSignIn"];
 
 /// Pages allowed to talk to the bridge (exact `Origin` header match).
 pub const ALLOWED_ORIGINS: &[&str] = &[

@@ -3220,7 +3220,7 @@ dependencies = [
 
 [[package]]
 name = "retv-bridge-adb"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "reqwest",
@@ -3234,7 +3234,7 @@ dependencies = [
 
 [[package]]
 name = "retv-bridge-app"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "rand 0.8.6",
  "retv-bridge-adb",
@@ -3258,7 +3258,7 @@ dependencies = [
 
 [[package]]
 name = "retv-bridge-cli"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "rand 0.8.6",
  "retv-bridge-adb",
@@ -3269,7 +3269,7 @@ dependencies = [
 
 [[package]]
 name = "retv-bridge-core"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "futures-util",
@@ -3285,7 +3285,7 @@ dependencies = [
 
 [[package]]
 name = "retv-bridge-mdns"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "if-addrs",

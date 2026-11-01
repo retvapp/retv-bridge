@@ -15,6 +15,7 @@ enum Part {
     Seconds,
     ProfileUser,
     Hex64,
+    DeviceCode,
     Chunk,
     PkgList,
     AnyUser,
@@ -32,6 +33,8 @@ enum Part {
 use Part::*;
 
 const RETV_DIR: &str = "/sdcard/ReTV/";
+/// The two server cells (markets) ReTV Home can be told about.
+const CELLS: &[&str] = &["ru", "world"];
 /// ReTV Home's layout backup in Download under its own name, and the «(n)» names a reinstall's copy gets.
 const LAYOUT_BACKUPS: &[&str] = &[
     "/sdcard/Download/ReTV/retv-home-layout.json",
@@ -142,7 +145,8 @@ const SHAPES: &[&[&[Part]]] = &[
     &[&[Lit("cat"), Lit("/proc/meminfo")]],
     &[&[Lit("dumpsys"), OneOf(DUMPSYS_SERVICES)]],
     &[&[Lit("dumpsys"), OneOf(&["meminfo", "package"]), Pkg]],
-    &[&[Lit("dumpsys"), Lit("notification"), Lit("--noredact")]],
+    // Redacted only (audit L-E): `--noredact` would print the notifications' text (messages, codes) to the site.
+    &[&[Lit("dumpsys"), Lit("notification")]],
     &[&[Lit("dumpsys"), Lit("user")]],
     &[&[Lit("dumpsys"), Lit("package")], MIC_FILTER],
     &[&[Lit("dumpsys"), Lit("package"), Pkg], MIC_FILTER],
@@ -560,7 +564,7 @@ const SHAPES: &[&[&[Part]]] = &[
         Lit("speed-profile"),
         Lit("-a"),
     ]],
-    // ReTV Home: its four receivers (all need the shell's DUMP permission), and the Play Store page of an app.
+    // ReTV Home: its five receivers (all need the shell's DUMP permission), and the Play Store page of an app.
     &[&[
         Lit("am"),
         Lit("broadcast"),
@@ -573,6 +577,42 @@ const SHAPES: &[&[&[Part]]] = &[
         Lit("--es"),
         Lit("key"),
         Hex64,
+    ]],
+    // The site that set ReTV Home up (its market) and, signed in, the account's one-time sign-in code (engine
+    // `google-tv.ts` sendSiteSignIn). User 0 only: a profile's ReTV Home never gets the code. The code is never
+    // logged (`redact_secrets`).
+    &[&[
+        Lit("am"),
+        Lit("broadcast"),
+        Lit("--user"),
+        Lit("0"),
+        Lit("-n"),
+        Lit("app.retv.home/.data.SiteSignInReceiver"),
+        Lit("-a"),
+        Lit("app.retv.home.action.SITE_SIGN_IN"),
+        Lit("-f"),
+        Lit("32"),
+        Lit("--es"),
+        Lit("cell"),
+        OneOf(CELLS),
+    ]],
+    &[&[
+        Lit("am"),
+        Lit("broadcast"),
+        Lit("--user"),
+        Lit("0"),
+        Lit("-n"),
+        Lit("app.retv.home/.data.SiteSignInReceiver"),
+        Lit("-a"),
+        Lit("app.retv.home.action.SITE_SIGN_IN"),
+        Lit("-f"),
+        Lit("32"),
+        Lit("--es"),
+        Lit("cell"),
+        OneOf(CELLS),
+        Lit("--es"),
+        Lit("code"),
+        DeviceCode,
     ]],
     // The packages ReTV turned off, for ReTV Home's «ТВ в порядке» (engine `home-record.ts`), in numbered chunks.
     // Under `timeout 10`: a broadcast whose finish never comes (a stopped user) cannot hold the wizard.
@@ -697,6 +737,11 @@ fn is_profile_user(w: &str) -> bool {
 
 fn is_hex64(w: &str) -> bool {
     w.len() == 64 && all_bytes(w, |c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+}
+
+/// The one-time sign-in code handed to ReTV Home (`POST /v1/tv/handoff`): 32 random bytes, base64url, no padding.
+fn is_device_code(w: &str) -> bool {
+    w.len() == 43 && all_bytes(w, |c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
 }
 
 /// A chunk number or count for ReTV Home's disabled set: 1..99, no leading zero.
@@ -827,6 +872,7 @@ fn part_matches(part: Part, w: &str) -> bool {
         Seconds => is_seconds(w),
         ProfileUser => is_profile_user(w),
         Hex64 => is_hex64(w),
+        DeviceCode => is_device_code(w),
         Chunk => is_chunk(w),
         PkgList => is_pkg_list(w),
         AnyUser => w == "0" || is_profile_user(w),
@@ -932,6 +978,25 @@ pub fn allow_command(cmd: &str) -> Option<String> {
     )
 }
 
+/// A command line as it may be logged: the one-time sign-in code handed to ReTV Home (`--es code <code>`) is
+/// replaced by `<hidden>`, so no bridge log, window or file ever holds it. Everything else is left as it was.
+pub fn redact_secrets(line: &str) -> String {
+    const KEY: &str = "--es code ";
+    let mut out = String::with_capacity(line.len());
+    let mut rest = line;
+    while let Some(at) = rest.find(KEY) {
+        out.push_str(&rest[..at + KEY.len()]);
+        rest = &rest[at + KEY.len()..];
+        let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+        if end > 0 {
+            out.push_str("<hidden>");
+        }
+        rest = &rest[end..];
+    }
+    out.push_str(rest);
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -946,6 +1011,25 @@ mod tests {
             allow_command("pm enable --user 0 'a.b/.C$D'").as_deref(),
             Some("pm enable --user 0 'a.b/.C$D'")
         );
+    }
+
+    #[test]
+    fn redacts_the_sign_in_code() {
+        let code = "Ab0_-".repeat(8) + "xyz";
+        let line = format!("am broadcast --user 0 -n app.retv.home/.data.SiteSignInReceiver -a app.retv.home.action.SITE_SIGN_IN -f 32 --es cell world --es code {code}");
+        let shown = redact_secrets(&line);
+        assert!(!shown.contains(&code), "{shown}");
+        assert!(
+            shown.ends_with("--es cell world --es code <hidden>"),
+            "{shown}"
+        );
+        let quoted = redact_secrets(&format!("x --es code '{code}' y"));
+        assert_eq!(quoted, "x --es code <hidden> y");
+        assert_eq!(
+            redact_secrets("getprop ro.product.model"),
+            "getprop ro.product.model"
+        );
+        assert_eq!(redact_secrets("--es code "), "--es code ");
     }
 
     #[test]

@@ -29,7 +29,7 @@ use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_notification::NotificationExt;
 
 use crate::i18n::{tf, Lang};
-use crate::state::{format_code, new_token, AppState, Notice, Settings, View};
+use crate::state::{format_code, new_token, AppState, Settings, View};
 use crate::tray::SettingsStore;
 
 pub type Shared = Arc<Mutex<AppState>>;
@@ -59,8 +59,9 @@ impl Clock for SystemClock {
     }
 }
 
-/// mDNS discovery for `RealAdb`. A denial shows the Local Network help in the
-/// window (macOS); a later success clears it.
+/// mDNS discovery for `RealAdb`. Denied rounds show the Local Network help in
+/// the window (macOS) only as `AppState::discovery_result` decides; a later
+/// success clears it.
 fn discoverer(app: AppHandle) -> Discoverer {
     Arc::new(move || -> BoxFuture<'static, Vec<MdnsService>> {
         let app = app.clone();
@@ -73,17 +74,15 @@ fn discoverer(app: AppHandle) -> Discoverer {
             let st = shared(&app);
             match r {
                 Ok(found) => {
-                    lock(&st).clear_notice(Notice::LanDenied);
+                    lock(&st).discovery_result(false, found.len());
                     found.iter().map(MdnsService::from).collect()
                 }
                 Err(e) => {
                     let mut s = lock(&st);
                     s.push_log(format!("[bridge] mDNS discovery failed: {e}"));
-                    if cfg!(target_os = "macos")
-                        && e == retv_bridge_mdns::DiscoverError::LocalNetworkDenied
-                    {
-                        s.add_notice(Notice::LanDenied);
-                    }
+                    let denied = cfg!(target_os = "macos")
+                        && e == retv_bridge_mdns::DiscoverError::LocalNetworkDenied;
+                    s.discovery_result(denied, 0);
                     Vec::new()
                 }
             }

@@ -1,0 +1,23 @@
+{
+  "description": "With aloneMs and aloneMaxMs set (the server sets 10 min and 30 min; off by default): a room no ctl has ever joined expires aloneMs after its creation or the TV's last code claim (claimed), and aloneMaxMs after its creation at most. A TV's own frames (touch) do not renew it. A room a ctl joined once keeps the plain idle rule (here it goes 30 min after the ctl joined, its last activity).",
+  "options": {"aloneMs":600000,"aloneMaxMs":1800000},
+  "steps": [
+    {"at":0,"op":"open","room":"AloneOneAAAAAAAAAAAAAA","role":"tv","peer":"tv1","expect":"ok"},
+    {"at":0,"op":"open","room":"AloneTwoAAAAAAAAAAAAAA","role":"tv","peer":"tv2","expect":"ok"},
+    {"at":0,"op":"open","room":"WithCtlAAAAAAAAAAAAAAA","role":"tv","peer":"tv3","expect":"ok"},
+    {"at":1000,"op":"open","room":"WithCtlAAAAAAAAAAAAAAA","role":"ctl","peer":"ctl3","expect":"ok"},
+    {"at":2000,"op":"leave","room":"WithCtlAAAAAAAAAAAAAAA","peer":"ctl3","expect":{"notify":"tv3"}},
+    {"at":300000,"op":"touch","room":"AloneOneAAAAAAAAAAAAAA"},
+    {"at":300000,"op":"claimed","room":"AloneTwoAAAAAAAAAAAAAA"},
+    {"at":599999,"op":"has","room":"AloneOneAAAAAAAAAAAAAA","expect":true},
+    {"at":600000,"op":"has","room":"AloneOneAAAAAAAAAAAAAA","expect":false},
+    {"at":600000,"op":"has","room":"AloneTwoAAAAAAAAAAAAAA","expect":true},
+    {"at":600000,"op":"has","room":"WithCtlAAAAAAAAAAAAAAA","expect":true},
+    {"at":600000,"op":"sweep","expect":{"expired":[{"roomId":"AloneOneAAAAAAAAAAAAAA","peers":["tv1"]}]}},
+    {"at":850000,"op":"claimed","room":"AloneTwoAAAAAAAAAAAAAA"},
+    {"at":1400000,"op":"claimed","room":"AloneTwoAAAAAAAAAAAAAA"},
+    {"at":1799999,"op":"has","room":"AloneTwoAAAAAAAAAAAAAA","expect":true},
+    {"at":1800000,"op":"sweep","expect":{"expired":[{"roomId":"AloneTwoAAAAAAAAAAAAAA","peers":["tv2"]}]}},
+    {"at":1801000,"op":"sweep","expect":{"expired":[{"roomId":"WithCtlAAAAAAAAAAAAAAA","peers":["tv3"]}]}}
+  ]
+}

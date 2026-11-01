@@ -8,7 +8,7 @@
   "steps": [
     {"send": {"id": 1, "type": "adbStart", "method": "classic"}, "expect": {"id": 1, "ok": false, "error": "unauthorized"}},
     {"send": {"id": 2, "type": "adbStart", "method": "wireless"}, "expect": {"id": 2, "ok": false, "error": "wireless-off"}},
-    {"send": {"id": 3, "type": "hello"}, "expect": {"id": 3, "ok": true, "result": {"version": "$any", "protocol": 3, "features": ["installApk", "allowlist", "helper"], "adb": false, "paired": true}}},
+    {"send": {"id": 3, "type": "hello"}, "expect": {"id": 3, "ok": true, "result": {"version": "$any", "protocol": 3, "features": ["installApk", "allowlist", "helper", "siteSignIn"], "adb": false, "paired": true}}},
     {"send": {"id": 4, "type": "connect", "ip": "127.0.0.1"}, "expect": {"id": 4, "ok": false, "error": "adb-not-ready"}}
   ]
 }

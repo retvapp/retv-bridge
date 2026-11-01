@@ -351,7 +351,9 @@ TV rules, which the vectors cannot show:
   `{"t":"confirm","next":"<22-char base64url>"}` from the TV (16 bytes, canonical, no padding). A peer that fails to
   open it, or to parse it as the other side's confirm (`e2e-bad-confirm`), closes with `e2e-failed`.
 - Each direction counts from 0, and a receiver accepts exactly the next counter. A replay, gap, reorder, bad tag or
-  short frame is `e2e-bad-frame`, and it **latches**: every later `open` and `seal` on that session fails too.
+  short frame is `e2e-bad-frame`, and it **latches**: every later `open` and `seal` on that session fails too. A TV
+  that gets one on a live session ends the session (debugging off, as «Отключить телефон»); it does not wait for the
+  phone to re-handshake.
 - A sender stops with `e2e-counter-exhausted` rather than wrap past `2^64 - 1`.
 
 ### Files
@@ -405,6 +407,11 @@ The relay pairs two sockets and passes their frames on. It sees only ciphertext,
   before a `sweep` removes it: `has` is false, `touch` does not renew it, `forward` gives `null`, `open` never
   resurrects it (a `ctl` gets `no-room`), and the `full` check expires such rooms first. The next `sweep` still reports
   each of them once, before the rooms it expires itself.
+- **A TV alone** (with `aloneMs` and `aloneMaxMs` set; the server sets 10 min and 30 min, off by default in the logic):
+  a room no `ctl` has ever joined also expires `aloneMs` after its creation or the TV's last code claim (`claimed`),
+  and `aloneMaxMs` after its creation at most. The TV's own frames do not renew it. So a TV showing a QR or a code
+  keeps its room about as long as a code lives, and a socket that only holds a room cannot keep it for hours; the
+  Helper then opens a fresh room with a new QR (it already does so after 10 unused minutes).
 - A link code is **6 random digits drawn fresh at every claim** (`crypto.randomInt`), never derived from the room
   or reused on purpose. The TV claims one only when it shows the code («Нет камеры? Показать код», and again on
   «Новый код»), so the code never appears with the QR. It lives 600 s and works once: a hit gives the room id and
@@ -413,19 +420,22 @@ The relay pairs two sockets and passes their frames on. It sees only ciphertext,
   and «Разрешить» on the TV, and the TV's limit of 3 failed attempts until «Новый код» holds whatever the relay does.
 - 5 lookup misses from one IP within 10 min block that IP for 10 min: the 5th miss still answers `not-found`, and
   every lookup in the block answers `rate-limited`, a right code included, without extending it. A malformed or
-  expired code is a miss.
-- **Global miss budget**, a cheap stop to probing from many IPs: 300 misses in total (over every IP) within 10 min
-  block **every** lookup for 10 min. The 300th miss still answers `not-found`; in the block every lookup answers
-  `rate-limited`, without extending it. A `rate-limited` answer is not a miss, a hit does not count, and claims still
-  work. With 10^6 codes and at most 1000 rooms, that caps a many-IP search at about 0.3 hits per 10 min, while the
-  person with the TV can still wait out the block or use the QR. The price: such an attack also blocks honest code
-  lookups for its duration (never the QR).
+  expired code is a miss. 30 misses from one prefix (an IPv4 /24, an IPv6 /56) block that prefix the same way.
+- **Per-code miss budget** (it replaced a global block that let a few dozen IPs stop every code lookup): a code is
+  burned once `missBudget` misses (5000 on the relay) happened over every client while it was live. A burned code
+  finds nothing (`not-found`); the next `sweep` names its room once in `burned`, and the server sends that TV
+  `{"relay":"code-void"}`, on which the Helper claims a fresh code. Nobody is blocked, and a code claimed later counts
+  only the misses after its claim. A guess at one live code within the budget wins with a chance of at most 0.5 %, and
+  a hit still meets the commit and reveal, the SAS and «Разрешить» on the TV.
 - Per IP: at most 20 room creations per sliding hour (a refused one is not counted), 8 open sockets, and 10 link-code
-  claims per sliding 10 min (a refused one is not counted; a person presses «Новый код» far less often).
+  claims per sliding 10 min (a refused one is not counted; a person presses «Новый код» far less often). Per prefix
+  (/24, /56): 60 room creations per hour, 32 open sockets and 30 claims per 10 min. A refused event counts against
+  neither the IP nor the prefix.
 - Limits key on `ipKey = HMAC-SHA256(per-process random key, ipKeyInput(ip))`, held in memory only. The IP itself is
   never stored. `ipKeyInput` keeps an IPv4 address exact (an IPv4-mapped `::ffff:a.b.c.d` is that IPv4 address) and
   takes an IPv6 address as its /64 prefix in one spelling (`2001:db8:0:1::/64`), since one subscriber usually holds a
-  whole /64 and could otherwise spread over 2^64 keys.
+  whole /64 and could otherwise spread over 2^64 keys. The prefix key is the same HMAC over `prefix:` and
+  `ipPrefixInput(ip)`: `198.51.100.0/24`, `2001:db8:0:100::/56`.
 
 Expiry and windows are half-open: a code claimed at `t` is live while `now < t + 600 000`; a room expires when
 `now - lastActive >= idleMs` or `now - createdAt >= maxLifeMs`; a miss, a creation or a claim counts while
@@ -438,8 +448,9 @@ A file is one scenario:
   "steps": [{ "at": 0, "op": "open", "room": "RoomOneAAAAAAAAAAAAAAA", "role": "tv", "peer": "tv", "expect": "ok" }] }
 ```
 
-`options` (optional) overrides `createRooms`'s `idleMs`, `maxLifeMs` or `maxRooms`. A runner builds one rooms, one
-codes and one limits instance and one ipKey function per file, sets the clock to each step's `at` (ms, never
+`options` (optional) overrides `createRooms`'s `idleMs`, `maxLifeMs`, `maxRooms` (4000 by default), `aloneMs` or
+`aloneMaxMs`, and `createCodes`'s `missBudget`. A runner builds one rooms, one codes and one limits instance and one
+client-keys function per file, sets the clock to each step's `at` (ms, never
 decreasing), runs the step and compares its result with `expect` (deep equality) when the step has one:
 
 | `op` | Arguments | `expect` |
@@ -447,9 +458,10 @@ decreasing), runs the step and compares its result with `expect` (deep equality)
 | `open` | `room`, `role` (`tv`/`ctl`), `peer` | `"ok"`, `"no-room"`, `"busy"`, `"full"` or `"bad-room-id"` |
 | `leave` | `room`, `peer` | `{ "notify": peer or null }` |
 | `touch` | `room` | none |
+| `claimed` | `room` | none (the TV claimed a code: renews a TV alone) |
 | `has` | `room` | `true` while the room exists and has not expired |
 | `forward` | `room`, `from` | the other peer, or `null` |
-| `sweep` | none | `{ "expired": [{ "roomId", "peers" }] }`, rooms in creation order, peers tv first; also sweeps codes and limits |
+| `sweep` | none | `{ "expired": [{ "roomId", "peers" }] }`, rooms in creation order, peers tv first; also sweeps codes and limits. In a file whose sweeps expect `burned`, the codes' `{ "burned": [roomId] }` instead |
 | `claim` | `room`, `random`: the values `random6` returns, in order (all must be used) | `{ "code", "expiresIn": 600 }` |
 | `revoke` | `room` | none |
 | `lookup` | `code`, `ip` | `{ "roomId" }`, `"not-found"` or `"rate-limited"` |
@@ -457,7 +469,8 @@ decreasing), runs the step and compares its result with `expect` (deep equality)
 | `claimAllowed` | `ip` | `allowCodeClaim`: `true` or `false` |
 | `socket` | `ip`, `action`: `"open"` (`allowSocket`, expects a boolean) or `"release"` (`releaseSocket`) | as stated |
 
-Peers are opaque names. `ip` goes through the runner's ipKey function first, so the logic only ever sees an ipKey.
+Peers are opaque names. `ip` goes through the runner's client-keys function first, so the logic only ever sees an
+ipKey and a prefix key.
 The IPs are documentation addresses (`198.51.100.x`, `203.0.113.x`, `2001:db8::/32`).
 
 ### The relay's wire
@@ -465,24 +478,39 @@ The IPs are documentation addresses (`198.51.100.x`, `203.0.113.x`, `2001:db8::/
 Not a fixture: what the TV and the phone see of the relay (`relay/server.ts`, tested by `relay/server.test.ts`).
 
 - `GET /relay/v1/room/<roomId>?role=tv|ctl` upgrades to a WebSocket. Two caps refuse before the handshake, with a
-  plain HTTP answer: `429` past 8 open sockets per IP, `503` past the relay's open sockets over all clients (4000,
+  plain HTTP answer: `429` past 8 open sockets per IP or 32 per prefix, `503` past the relay's open sockets over all clients (4000,
   `RELAY_MAX_SOCKETS`). Any other refusal upgrades, then closes with:
-  `4400` bad room id, role or message, `4404` no room (a `ctl`), `4409` busy, `4429` rate-limited (20 new rooms per
-  IP per hour; a `tv` joining its existing room is not a new room), `4503` full (1000 rooms), `4408` idle or
-  max life, `4410` the other peer left and did not come back within 60 s (checked by the 30 s sweep, so 60 to 90 s;
+  `4400` bad room id, role or message, `4404` no room (a `ctl`), `4409` busy, `4411` replaced (see the claim token
+  below), `4429` rate-limited (20 new rooms per
+  IP, 60 per prefix per hour; a `tv` joining its existing room is not a new room), `4503` full (4000 rooms), `4408`
+  idle, max life, or a TV alone past its wait, `4410` the other peer left and did not come back within 10 min (checked by the 30 s sweep, so 10 to 10.5 min;
   the room then ends), `4413` the other peer is not reading: a frame that would take its unsent queue past 4 MiB
   closes the sender and is dropped (so a room never buffers more than 4 MiB per direction). A frame over 1 MiB + 1 KiB
   closes `1009`. Once the relay closes a peer, it ignores that peer's later frames, and the other peer gets `peer-left`
   at once.
+- A `ctl` may offer the WebSocket subprotocol `retv.ctl.<token>` (16 random bytes, base64url), which the relay selects.
+  The browser keeps the token with its link. A `ctl` whose token equals the token of the `ctl` holding the slot takes
+  the slot over: the older socket closes `4411`, the `tv` gets `peer-left` then `peer-joined`. Another token, no token,
+  or a holder that offered none still meets `4409`. The token grants nothing else: the `tv` still needs the E2E
+  handshake (QR secret, or the check digits and «Разрешить») from the new socket. The token is no secret against the
+  relay host or a proxy that logs request headers (`Sec-WebSocket-Protocol`): keep header logging off for `/relay/*`.
 - Every 30 s the relay pings each peer; one that has not answered the previous ping (a half-open socket) is dropped,
   so its slot frees within about a minute and a phone can rejoin.
+- Just before the `tv` gets `peer-joined` (or, on a take-over, the second `peer-joined`), it gets
+  `{"relay":"ctl-id","id":"<16 bytes base64url>"}` when the `ctl` offered a claim token. The id is the first 16 bytes of
+  SHA-256(`retv.ctl-id:` ‖ token). The Helper keeps the id of the phone its live session last completed with: that
+  phone (the same browser tab) pairs again from the away screen as before, while any other phone that pairs from the
+  away screen, QR included, waits for «Разрешить» on the TV with the check digits on both screens. An older relay sends
+  no id, so every away-screen pairing then waits for «Разрешить»; an older Helper ignores the message. The id comes
+  from the relay, so it only decides between asking and not asking a person who can already see the TV's QR.
 - When a peer joins and the other is there, both get `{"relay":"peer-joined"}`. When a peer leaves, the other gets
-  `{"relay":"peer-left"}`; the slot stays open for 60 s.
+  `{"relay":"peer-left"}`; the slot stays open for 10 min (a phone locked mid-setup comes back to the same room).
 - Binary frames, and text frames that start with `{"e2e"`, go to the other peer exactly as sent (dropped while it is
   away). The only other text frames allowed are the `tv`'s `{"relay":"claim-code"}`, answered with
   `{"relay":"code","code":"123456","expiresIn":600}` (or `{"relay":"rate-limited"}` past 10 claims per 10 min; the
   socket stays open), and `{"relay":"void-code"}` («Показать QR»), which voids the room's code without an answer.
-  Anything else closes `4400`. A room's code is also voided when the room ends.
+  Anything else closes `4400`. A room's code is also voided when the room ends. The relay may send the `tv`
+  `{"relay":"code-void"}` unasked: its code was burned (the miss budget above), and a fresh claim gives a new one.
 - `GET /relay/v1/code/<code>` answers `200 {"roomId"}`, `404 {"error":"not-found"}` or `429 {"error":"rate-limited"}`,
   always with `Cache-Control: no-store`. `GET /relay/healthz` answers `200 {"ok":true}`.
 - The client IP is the rightmost `X-Forwarded-For` entry only on a connection from a trusted proxy

@@ -1,0 +1,14 @@
+{
+  "en": [
+    "After setup, ReTV Home on the TV signs in to your account by itself",
+    "The local network warning shows only when access is really denied",
+    "Notification text from the TV no longer reaches the site, only the count",
+    "Clearer texts in the window"
+  ],
+  "ru": [
+    "После настройки ReTV Home на ТВ сам входит в ваш аккаунт",
+    "Предупреждение про локальную сеть появляется, только когда доступа действительно нет",
+    "Текст уведомлений с ТВ больше не уходит на сайт, только их количество",
+    "Понятнее тексты в окне"
+  ]
+}

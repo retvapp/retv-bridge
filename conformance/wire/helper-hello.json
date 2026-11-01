@@ -6,11 +6,11 @@
     "helper": {"sdk": 30, "release": "11", "classicPort": true, "rsa": "allow", "pairingService": true, "wirelessConnect": true, "wirelessPaired": false}
   },
   "steps": [
-    {"send": {"id": 1, "type": "hello", "version": 3}, "expect": {"id": 1, "ok": true, "result": {"version": "$any", "protocol": 3, "features": ["installApk", "allowlist", "helper"], "adb": false, "paired": true}}},
-    {"send": {"id": 2, "token": "stale", "type": "hello"}, "expect": {"id": 2, "ok": true, "result": {"version": "$any", "protocol": 3, "features": ["installApk", "allowlist", "helper"], "adb": false, "paired": true}}},
+    {"send": {"id": 1, "type": "hello", "version": 3}, "expect": {"id": 1, "ok": true, "result": {"version": "$any", "protocol": 3, "features": ["installApk", "allowlist", "helper", "siteSignIn"], "adb": false, "paired": true}}},
+    {"send": {"id": 2, "token": "stale", "type": "hello"}, "expect": {"id": 2, "ok": true, "result": {"version": "$any", "protocol": 3, "features": ["installApk", "allowlist", "helper", "siteSignIn"], "adb": false, "paired": true}}},
     {"send": {"id": "i-3", "type": "helperInfo"}, "expect": {"id": "i-3", "ok": true, "result": {"sdk": 30, "release": "11", "model": "MiTV-AYFR0", "classicPort": true, "adb": "none", "method": null}}},
     {"send": {"id": 4, "type": "adbStart", "method": "classic"}, "expect": {"id": 4, "ok": true, "result": {"method": "classic"}}},
-    {"send": {"id": 5, "token": 12345, "type": "hello"}, "expect": {"id": 5, "ok": true, "result": {"version": "$any", "protocol": 3, "features": ["installApk", "allowlist", "helper"], "adb": true, "paired": true}}},
+    {"send": {"id": 5, "token": 12345, "type": "hello"}, "expect": {"id": 5, "ok": true, "result": {"version": "$any", "protocol": 3, "features": ["installApk", "allowlist", "helper", "siteSignIn"], "adb": true, "paired": true}}},
     {"send": {"id": 6, "type": "helperInfo"}, "expect": {"id": 6, "ok": true, "result": {"sdk": 30, "release": "11", "model": "MiTV-AYFR0", "classicPort": true, "adb": "ready", "method": "classic"}}},
     {"expectAdb": {"ran": [], "pushed": {}}}
   ]

@@ -21,7 +21,7 @@
     {"send": {"id": 6, "type": "run", "serial": "self"}, "expect": {"id": 6, "ok": false, "error": "bad-request"}},
     {"send": {"id": 7, "type": "writeFile", "serial": "self", "path": "/sdcard/ReTV/a.json", "data": 5}, "expect": {"id": 7, "ok": false, "error": "bad-request"}},
     {"sendOversize": 1048576, "expect": {"id": -1, "ok": false, "error": "bad-request"}},
-    {"send": {"id": 8, "type": "hello"}, "expect": {"id": 8, "ok": true, "result": {"version": "$any", "protocol": 3, "features": ["installApk", "allowlist", "helper"], "adb": true, "paired": true}}},
+    {"send": {"id": 8, "type": "hello"}, "expect": {"id": 8, "ok": true, "result": {"version": "$any", "protocol": 3, "features": ["installApk", "allowlist", "helper", "siteSignIn"], "adb": true, "paired": true}}},
     {"expectAdb": {"ran": [], "pushed": {}}},
     {"sendOversize": 1048577, "expectClose": true}
   ]

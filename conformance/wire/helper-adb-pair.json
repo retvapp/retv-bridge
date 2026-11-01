@@ -13,7 +13,7 @@
     {"send": {"id": 4, "type": "adbPair", "code": "4829170"}, "expect": {"id": 4, "ok": false, "error": "bad-request"}},
     {"send": {"id": 5, "type": "adbPair", "code": "48291a"}, "expect": {"id": 5, "ok": false, "error": "bad-request"}},
     {"send": {"id": 6, "type": "adbPair", "code": "000000"}, "expect": {"id": 6, "ok": false, "error": "pairing-failed"}},
-    {"send": {"id": 7, "type": "hello"}, "expect": {"id": 7, "ok": true, "result": {"version": "$any", "protocol": 3, "features": ["installApk", "allowlist", "helper"], "adb": false, "paired": true}}},
+    {"send": {"id": 7, "type": "hello"}, "expect": {"id": 7, "ok": true, "result": {"version": "$any", "protocol": 3, "features": ["installApk", "allowlist", "helper", "siteSignIn"], "adb": false, "paired": true}}},
     {"send": {"id": 8, "type": "adbPair", "code": "482917"}, "expect": {"id": 8, "ok": true, "result": {"method": "wireless"}}},
     {"send": {"id": 9, "type": "helperInfo"}, "expect": {"id": 9, "ok": true, "result": {"sdk": 34, "release": "14", "model": "Chromecast", "classicPort": false, "adb": "ready", "method": "wireless"}}},
     {"send": {"id": 10, "type": "connect", "ip": "127.0.0.1"}, "expect": {"id": 10, "ok": true, "result": {"serial": "self", "model": "Chromecast"}}},

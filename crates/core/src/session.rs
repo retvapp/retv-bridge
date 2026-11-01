@@ -34,7 +34,7 @@ use tokio_tungstenite::tungstenite::{Error as WsError, Message};
 use tokio_tungstenite::WebSocketStream;
 
 use crate::api::{BridgeDevice, TransportError};
-use crate::commands::allow_command;
+use crate::commands::{allow_command, redact_secrets};
 use crate::events::BridgeEvent;
 use crate::install::{cancelled, clip_utf16, install_apk};
 use crate::pairing::{PairFinish, PairStart};
@@ -530,11 +530,15 @@ fn prepare_checked(
                     shared.log(format!(
                         "[bridge] refused {} (not on the allow-list): {}",
                         d.serial(),
-                        clip(cmd)
+                        clip(&redact_secrets(cmd))
                     ));
                     return Err(WireError::new("command-not-allowed"));
                 };
-                shared.log(format!("[bridge] run {}: {}", d.serial(), clip(&line)));
+                shared.log(format!(
+                    "[bridge] run {}: {}",
+                    d.serial(),
+                    clip(&redact_secrets(&line))
+                ));
                 let shared = shared.clone();
                 later(async move {
                     let r = d.run(&line).await?;

@@ -117,12 +117,23 @@ mod tests {
         assert_eq!(t(Lang::Ru, "quit.confirm"), "Идёт работа с ТВ. Выйти?");
         assert_eq!(
             tf(Lang::Ru, "tray.tv", &[("model", "MiTV-AFMU0")]),
-            "ТВ: MiTV-AFMU0 — подключён"
+            "ТВ: MiTV-AFMU0, подключён"
         );
         assert_eq!(
             tf(Lang::Ru, "notify.code", &[("code", "482 917")]),
             "Код для сайта: 482 917"
         );
         assert_eq!(t(Lang::Uk, "nope.missing"), "nope.missing");
+    }
+
+    #[test]
+    fn no_window_string_has_a_long_dash() {
+        for (name, text) in [
+            ("en", include_str!("../locales/en.json")),
+            ("ru", include_str!("../locales/ru.json")),
+            ("uk", include_str!("../locales/uk.json")),
+        ] {
+            assert!(!text.contains('\u{2014}'), "{name}.json has a long dash");
+        }
     }
 }

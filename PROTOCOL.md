@@ -380,10 +380,10 @@ storage is full. Its text still stays in the bridge's own log.
 ## Protocol v3
 
 Everything in v2 holds, with these changes. A v3 bridge answers `hello` with `protocol: 3` and
-`features: ["installApk", "allowlist"]`.
+`features: ["installApk", "allowlist", "siteSignIn"]`. `siteSignIn`: the allow-list takes ReTV Home's site sign-in broadcast (`--es code` included) and never logs the code; the site sends the code only to a bridge or Helper that announces it.
 
 ```json
-{ "version": "...", "protocol": 3, "features": ["installApk", "allowlist"], "adb": true, "paired": true }
+{ "version": "...", "protocol": 3, "features": ["installApk", "allowlist", "siteSignIn"], "adb": true, "paired": true }
 ```
 
 ### Why
@@ -451,7 +451,7 @@ The settings keys are the engine's `MANAGED_SETTINGS` (what a snapshot keeps and
 | `getprop` · `getprop <prop>` |
 | `cat /proc/meminfo` |
 | `dumpsys` with one of `connectivity`, `diskstats`, `meminfo`, `package`, `usagestats`, `wifi` |
-| `dumpsys meminfo <pkg>` · `dumpsys package <pkg>` · `dumpsys notification --noredact` |
+| `dumpsys meminfo <pkg>` · `dumpsys package <pkg>` · `dumpsys notification` (redacted: no `--noredact`) |
 | `dumpsys package [<pkg>]`, piped to exactly the engine's microphone filter (`mic-audit.ts` `MIC_FILTER`, below) |
 | `dumpsys package <pkg>`, piped to `grep -E '^ *(Package \[\|versionCode=\|versionName=)'` |
 | `pm list packages` · `pm list packages` with one of `-3`, `-d`, `-e`, `-s`, `-u` · `pm list packages -d -u` · `pm list packages <pkg>` · `pm list packages -e <pkg>` |
@@ -512,7 +512,7 @@ broadcasts to anything but ReTV Home's four receivers, and any other `dumpsys` s
 
 What a token holder can still do in v3, honestly: everything the site itself does, within the checks above.
 
-- **Read** what the site reads: the package lists, `dumpsys` of notifications (`--noredact`: their text), usage stats,
+- **Read** what the site reads: the package lists, `dumpsys` of notifications (redacted: packages and categories, never their text), usage stats,
   package details, Wi-Fi and connectivity state, memory and disk use, all of `getprop`, and `settings list` of all three
   namespaces (device names and other identifiers included), the snapshots in `/sdcard/ReTV/`, ReTV Home's layout
   backup in `Download/ReTV/` and installed apps' icons.
@@ -600,7 +600,7 @@ It speaks **protocol v3 with a profile of its own**: everything above holds, exc
 
 | type | params | result | errors |
 | --- | --- | --- | --- |
-| `hello` | none (`version` optional) | `{ version, protocol: 3, features: ["installApk", "allowlist", "helper"], adb, paired: true }` | none |
+| `hello` | none (`version` optional) | `{ version, protocol: 3, features: ["installApk", "allowlist", "helper", "siteSignIn"], adb, paired: true }` | none |
 | `helperInfo` | none | `{ sdk, release, model, classicPort, adb: "ready" \| "none", method: "classic" \| "wireless" \| null }` | none |
 | `adbStart` | `method`: `"classic"` \| `"wireless"` | `{ method }` | `unauthorized`, `device-unreachable`, `pairing-needed`, `wireless-off`, `bad-request` |
 | `adbPair` | `code`: a string of exactly 6 digits | `{ method: "wireless" }` | `no-pairing-service`, `pairing-failed`, `wireless-off`, `bad-request` |
@@ -625,7 +625,8 @@ session stays open.
 - **adbPair**: the 6 digits that the TV's Wireless debugging dialog for pairing with a code shows, typed on the phone. `code`
   that is not a string of exactly 6 digits is `bad-request` (checked first). No `_adb-tls-pairing` service within 5 s
   is `no-pairing-service`, a wrong code `pairing-failed` (the person may try again). On success the Helper pairs our
-  key, then connects as `adbStart wireless` does.
+  key, then connects as `adbStart wireless` does. Below Android 12 (`sdk` < 31) it is always `no-pairing-service`: the
+  pairing's TLS exporter is not public there, so the site offers the wireless route only from `sdk` 31.
 - **discover** lists the TV itself only.
 - **connect**: `ip` must be exactly `"127.0.0.1"`, else `ip-not-allowed` (checked first; any other address, `localhost`,
   or none). `port` is not used. Before `adbStart` / `adbPair` succeeded it is `adb-not-ready`. The serial is always
@@ -643,6 +644,13 @@ session stays open.
   way the Helper then closes the session. When the session never had an adb connection to turn debugging off with,
   `"off"` answers `{ debugging: "kept" }`. These commands are the Helper's own, not `run`: the site cannot send
   `adb_wifi_enabled` (it is not on the allow-list).
+- **The TV ends the session itself** («Отключить телефон» on the TV, or 30 min without a command): before it closes the
+  socket, the Helper turns debugging off and seals one frame with no `id` to the phone:
+  `{ "event": "session-ended", "by": "tv", "reason": "button" | "idle" | "other", "debugging": "off" | "kept" }`.
+  `reason`: `button` is «Отключить телефон» on the TV, `idle` the 30 min without a command, `other` any later TV-side
+  end; a site that does not know a reason treats it as `other`. The site then tells the person what ended the session,
+  whether debugging is off on the TV and how to connect again; an older site ignores a frame without a known `id`. A
+  session ended for a frame that did not open (a replay or tamper) sends nothing.
 
 ### Helper profile conformance
 

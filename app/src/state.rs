@@ -102,7 +102,14 @@ pub struct AppState {
     pub update: UpdateStatus,
     /// The last `retv-bridge://open` handled.
     pub deep_link_at: Option<Instant>,
+    /// mDNS rounds in a row that failed as «Local Network denied» and found nothing (see `discovery_result`).
+    pub lan_denied_rounds: u8,
 }
+
+/// Denied rounds in a row before the Local Network help shows. One is not enough: right after launch macOS can fail the
+/// first multicast sends while it applies a permission that is on (the S3 run: the help showed, then the Bridge found
+/// the TV by itself).
+pub const LAN_DENIED_ROUNDS: u8 = 2;
 
 impl AppState {
     pub fn new(token: String, locale: Lang) -> AppState {
@@ -122,6 +129,7 @@ impl AppState {
             view_seq: 0,
             update: UpdateStatus::Idle,
             deep_link_at: None,
+            lan_denied_rounds: 0,
         }
     }
 
@@ -152,6 +160,21 @@ impl AppState {
         self.notices.retain(|x| *x != n);
     }
 
+    /// One mDNS round: `denied` when it failed as «Local Network denied» (macOS), `found` the TVs it found. The help
+    /// shows only after LAN_DENIED_ROUNDS denied rounds in a row that found nothing; any round that works, or finds a TV,
+    /// clears it.
+    pub fn discovery_result(&mut self, denied: bool, found: usize) {
+        if !denied || found > 0 {
+            self.lan_denied_rounds = 0;
+            self.clear_notice(Notice::LanDenied);
+            return;
+        }
+        self.lan_denied_rounds = self.lan_denied_rounds.saturating_add(1);
+        if self.lan_denied_rounds >= LAN_DENIED_ROUNDS {
+            self.add_notice(Notice::LanDenied);
+        }
+    }
+
     pub fn notice_keys(&self) -> Vec<&'static str> {
         self.notices.iter().map(|n| n.key()).collect()
     }
@@ -180,6 +203,10 @@ impl AppState {
             }
             BridgeEvent::PairingDisabled => self.add_notice(Notice::PairingDisabled),
             BridgeEvent::TvConnected { serial, model } => {
+                // A TV reached over the network (`ip:port`) proves Local Network access: no help.
+                if serial.contains(':') {
+                    self.discovery_result(false, 1);
+                }
                 self.tvs.insert(serial.clone(), model.clone());
             }
             BridgeEvent::TvDisconnected { serial } => {
@@ -414,6 +441,33 @@ mod tests {
     }
 
     #[test]
+    fn local_network_help_only_after_denied_rounds_and_never_once_a_tv_is_found() {
+        let mut s = state();
+        // The first denied round right after launch shows nothing.
+        s.discovery_result(true, 0);
+        assert!(s.notice_keys().is_empty());
+        s.discovery_result(true, 0);
+        assert_eq!(s.notice_keys(), vec!["lan.denied"]);
+        // A round that works clears it and starts the count again.
+        s.discovery_result(false, 0);
+        assert!(s.notice_keys().is_empty());
+        s.discovery_result(true, 0);
+        assert!(s.notice_keys().is_empty());
+        // A denied querier whose other path found the TV is no denial.
+        s.discovery_result(true, 1);
+        s.discovery_result(true, 0);
+        assert!(s.notice_keys().is_empty());
+        // A network TV connecting clears the help.
+        s.discovery_result(true, 0);
+        assert_eq!(s.notice_keys(), vec!["lan.denied"]);
+        s.on_event(&BridgeEvent::TvConnected {
+            serial: "192.168.88.232:5555".into(),
+            model: "MDZ-32-AA".into(),
+        });
+        assert!(s.notice_keys().is_empty());
+    }
+
+    #[test]
     fn notices_are_unique_and_clearable() {
         let mut s = state();
         s.add_notice(Notice::LanDenied);
@@ -487,7 +541,7 @@ mod tests {
             serial: "192.0.2.233:5555".into(),
             model: "MiTV-AFMU0".into(),
         });
-        assert_eq!(s.tv_status(), "ТВ: MiTV-AFMU0 — подключён");
+        assert_eq!(s.tv_status(), "ТВ: MiTV-AFMU0, подключён");
         s.on_event(&BridgeEvent::TvDisconnected {
             serial: "192.0.2.233:5555".into(),
         });
