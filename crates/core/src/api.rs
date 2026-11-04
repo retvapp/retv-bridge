@@ -24,6 +24,15 @@ pub struct DiscoveredTv {
     pub ip: String,
     pub connect_port: Option<u16>,
     pub pair_port: Option<u16>,
+    /// An Amazon Fire TV (it announces `_amzn-wplay._tcp`, not adb). Its adb is
+    /// on 5555 once «ADB debugging» is on; Fire OS has no pairing screen.
+    /// Sent as `"fireTv": true` only when set, so older sites see no change.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub fire_tv: bool,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 /// Every adb failure. The first seven wire codes are the TS engine's
@@ -247,6 +256,7 @@ mod tests {
             ip: "192.168.1.20".into(),
             connect_port: Some(5555),
             pair_port: None,
+            fire_tv: false,
         };
         let json = serde_json::to_value(&tv).unwrap();
         assert_eq!(
@@ -260,5 +270,10 @@ mod tests {
         );
         let back: DiscoveredTv = serde_json::from_value(json).unwrap();
         assert_eq!(back, tv);
+        let fire = DiscoveredTv {
+            fire_tv: true,
+            ..tv
+        };
+        assert_eq!(serde_json::to_value(&fire).unwrap()["fireTv"], true);
     }
 }

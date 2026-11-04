@@ -28,6 +28,10 @@ enum Part {
     ApkPath,
     ApkEntry,
     MarketUrl,
+    TvPnp,
+    TvText,
+    TvYear,
+    TvCec,
 }
 
 use Part::*;
@@ -61,6 +65,9 @@ const LIST_FLAGS: &[&str] = &["-3", "-d", "-e", "-s", "-u"];
 const DUMPSYS_SERVICES: &[&str] = &[
     "connectivity",
     "diskstats",
+    // `display` and `hdmi_control`: the TV a stick is plugged into (engine `tv-info.ts` readTvInfo), no options.
+    "display",
+    "hdmi_control",
     "meminfo",
     "package",
     "usagestats",
@@ -75,6 +82,10 @@ const QUERY_SERVICES: &[&str] = &[
     "android.service.voice.VoiceInteractionService",
     "android.service.dreams.DreamService",
 ];
+/// `DeviceProductInfo.connectionToSinkType`: 0 unknown, 1 built in, 2 direct, 3 transitive.
+const TV_SINKS: &[&str] = &["0", "1", "2", "3"];
+/// What the device itself is on HDMI-CEC (`ro.hdmi.device_type`); `-` is unknown.
+const TV_KINDS: &[&str] = &["stick", "tv", "-"];
 const APPOPS: &[&str] = &["RECORD_AUDIO", "RUN_ANY_IN_BACKGROUND"];
 const APPOPS_MODES: &[&str] = &["allow", "ignore", "deny", "default", "foreground"];
 /// The settings ReTV reads and changes (the engine's `MANAGED_SETTINGS`, plus `adb_enabled` for «finish»).
@@ -86,13 +97,36 @@ const GLOBAL_KEYS: &[&str] = &[
     "private_dns_specifier",
     "always_finish_activities",
     "adb_enabled",
+    FIRE_VIDEO_KEY,
+    FIRE_VOLUME_KEY,
 ];
 const SECURE_KEYS: &[&str] = &[
     "enabled_accessibility_services",
     "accessibility_enabled",
     "screensaver_components",
     "limit_ad_tracking",
+    "amz_limit_ad_tracking",
+    "non_amz_limit_ad_tracking",
+    "advertisingIdApp:interestBasedAds:value",
+    "USAGE_METRICS_UPLOAD_ENABLED",
+    "usage_metrics_marketing_enabled",
+    "settingsApp:appUsageData:value",
+    "settingsApp:deviceUsageData:value",
 ];
+/// Fire OS ads and tracking switches (engine `privacy.ts` FIRE_PRIVACY_SETTINGS), 0 or 1 each.
+const FIRE_SECURE_SWITCHES: &[&str] = &[
+    "limit_ad_tracking",
+    "amz_limit_ad_tracking",
+    "non_amz_limit_ad_tracking",
+    "advertisingIdApp:interestBasedAds:value",
+    "USAGE_METRICS_UPLOAD_ENABLED",
+    "usage_metrics_marketing_enabled",
+    "settingsApp:appUsageData:value",
+    "settingsApp:deviceUsageData:value",
+];
+/// Fire OS featured content autoplay: video on or off, and its volume (a scale).
+const FIRE_VIDEO_KEY: &str = "com.amazon.tv.settings.featured_item_video_enabled";
+const FIRE_VOLUME_KEY: &str = "com.amazon.tv.settings.featured_item_video_volume";
 const NAMESPACES: &[&str] = &["global", "secure", "system"];
 
 /// The engine's microphone filter (`mic-audit.ts` `MIC_FILTER`): fixed `-e` patterns, word for word.
@@ -130,6 +164,8 @@ const ICON_FILTER: &[Part] = &[
 const RECORD_AUDIO: &str = "android.permission.RECORD_AUDIO";
 const READ_LOGS: &str = "android.permission.READ_LOGS";
 const READ_TV_LISTINGS: &str = "android.permission.READ_TV_LISTINGS";
+/// Fire OS: ReTV Home puts its own FireHomeService back after an update (engine google-tv.ts enableHomeOverride).
+const WRITE_SECURE_SETTINGS: &str = "android.permission.WRITE_SECURE_SETTINGS";
 /// The screens «Ad privacy» may open (ads privacy, privacy, then the settings root as the fallback).
 const PRIVACY_ACTIONS: &[&str] = &[
     "com.google.android.gms.settings.ADS_PRIVACY",
@@ -415,6 +451,14 @@ const SHAPES: &[&[&[Part]]] = &[
         Lit(READ_TV_LISTINGS),
     ]],
     &[&[
+        Lit("pm"),
+        OneOf(&["grant", "revoke"]),
+        Lit("--user"),
+        Lit("0"),
+        Lit("app.retv.home"),
+        Lit(WRITE_SECURE_SETTINGS),
+    ]],
+    &[&[
         Lit("cmd"),
         Lit("appops"),
         Lit("set"),
@@ -530,8 +574,22 @@ const SHAPES: &[&[&[Part]]] = &[
         Lit("settings"),
         Lit("put"),
         Lit("secure"),
-        Lit("limit_ad_tracking"),
+        OneOf(FIRE_SECURE_SWITCHES),
         OneOf(&["0", "1"]),
+    ]],
+    &[&[
+        Lit("settings"),
+        Lit("put"),
+        Lit("global"),
+        Lit(FIRE_VIDEO_KEY),
+        OneOf(&["0", "1"]),
+    ]],
+    &[&[
+        Lit("settings"),
+        Lit("put"),
+        Lit("global"),
+        Lit(FIRE_VOLUME_KEY),
+        Scale,
     ]],
     &[&[
         Lit("settings"),
@@ -564,7 +622,7 @@ const SHAPES: &[&[&[Part]]] = &[
         Lit("speed-profile"),
         Lit("-a"),
     ]],
-    // ReTV Home: its five receivers (all need the shell's DUMP permission), and the Play Store page of an app.
+    // ReTV Home: its six receivers (all need the shell's DUMP permission), and the Play Store page of an app.
     &[&[
         Lit("am"),
         Lit("broadcast"),
@@ -577,6 +635,38 @@ const SHAPES: &[&[&[Part]]] = &[
         Lit("--es"),
         Lit("key"),
         Hex64,
+    ]],
+    // The TV the stick is plugged into (engine `tv-info.ts` sendTvInfo), for ReTV Home on Android 11 and older.
+    &[&[
+        Lit("am"),
+        Lit("broadcast"),
+        Lit("-n"),
+        Lit("app.retv.home/.data.TvInfoReceiver"),
+        Lit("-a"),
+        Lit("app.retv.home.action.TV_INFO"),
+        Lit("-f"),
+        Lit("32"),
+        Lit("--es"),
+        Lit("pnp"),
+        TvPnp,
+        Lit("--es"),
+        Lit("name"),
+        TvText,
+        Lit("--ei"),
+        Lit("year"),
+        TvYear,
+        Lit("--ei"),
+        Lit("sink"),
+        OneOf(TV_SINKS),
+        Lit("--es"),
+        Lit("cec"),
+        TvCec,
+        Lit("--es"),
+        Lit("osd"),
+        TvText,
+        Lit("--es"),
+        Lit("kind"),
+        OneOf(TV_KINDS),
     ]],
     // The site that set ReTV Home up (its market) and, signed in, the account's one-time sign-in code (engine
     // `google-tv.ts` sendSiteSignIn). User 0 only: a profile's ReTV Home never gets the code. The code is never
@@ -674,6 +764,15 @@ const SHAPES: &[&[&[Part]]] = &[
         MarketUrl,
     ]],
     &[&[Lit("am"), Lit("start"), Lit("-a"), OneOf(PRIVACY_ACTIONS)]],
+    // ReTV Home brought to the screen when setup ends (web Result): the plain HOME intent only.
+    &[&[
+        Lit("am"),
+        Lit("start"),
+        Lit("-a"),
+        Lit("android.intent.action.MAIN"),
+        Lit("-c"),
+        Lit("android.intent.category.HOME"),
+    ]],
 ];
 
 fn all_bytes(s: &str, ok: impl Fn(u8) -> bool) -> bool {
@@ -737,6 +836,34 @@ fn is_profile_user(w: &str) -> bool {
 
 fn is_hex64(w: &str) -> bool {
     w.len() == 64 && all_bytes(w, |c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+}
+
+/// The TV's EDID maker id: three capital letters, or `-` (unknown).
+fn is_tv_pnp(w: &str) -> bool {
+    w == "-" || (w.len() == 3 && all_bytes(w, |c| c.is_ascii_uppercase()))
+}
+
+/// A TV's EDID or HDMI-CEC name, cleaned by the engine: 1..32 of `[A-Za-z0-9 ._+-]`, no space at either end; or `-`.
+fn is_tv_text(w: &str) -> bool {
+    w == "-"
+        || (!w.is_empty()
+            && w.len() <= 32
+            && !w.starts_with(' ')
+            && !w.ends_with(' ')
+            && all_bytes(w, |c| word_byte(c) || b" .+-".contains(&c)))
+}
+
+/// The TV's model year: `0` (unknown) or 1990..2099.
+fn is_tv_year(w: &str) -> bool {
+    w == "0"
+        || (w.len() == 4
+            && all_bytes(w, |c| c.is_ascii_digit())
+            && w.parse::<u32>().is_ok_and(|y| (1990..=2099).contains(&y)))
+}
+
+/// The TV's HDMI-CEC vendor id: six capital hex digits, or `-`.
+fn is_tv_cec(w: &str) -> bool {
+    w == "-" || (w.len() == 6 && all_bytes(w, |c| c.is_ascii_digit() || (b'A'..=b'F').contains(&c)))
 }
 
 /// The one-time sign-in code handed to ReTV Home (`POST /v1/tv/handoff`): 32 random bytes, base64url, no padding.
@@ -885,6 +1012,10 @@ fn part_matches(part: Part, w: &str) -> bool {
         ApkPath => is_apk_path(w),
         ApkEntry => is_apk_entry(w),
         MarketUrl => is_market_url(w),
+        TvPnp => is_tv_pnp(w),
+        TvText => is_tv_text(w),
+        TvYear => is_tv_year(w),
+        TvCec => is_tv_cec(w),
     }
 }
 
@@ -978,15 +1109,22 @@ pub fn allow_command(cmd: &str) -> Option<String> {
     )
 }
 
-/// A command line as it may be logged: the one-time sign-in code handed to ReTV Home (`--es code <code>`) is
-/// replaced by `<hidden>`, so no bridge log, window or file ever holds it. Everything else is left as it was.
+/// The extras whose values are secrets handed to ReTV Home: the one-time sign-in code, the account's device key and
+/// the layout backup (audit 2026-11-01 L2).
+const HIDDEN_EXTRAS: &[&str] = &["--es code ", "--es key ", "--es backup "];
+
+/// A command line as it may be logged: the value after each of `HIDDEN_EXTRAS` is replaced by `<hidden>`, so no
+/// bridge log, window or file ever holds it. Everything else is left as it was.
 pub fn redact_secrets(line: &str) -> String {
-    const KEY: &str = "--es code ";
     let mut out = String::with_capacity(line.len());
     let mut rest = line;
-    while let Some(at) = rest.find(KEY) {
-        out.push_str(&rest[..at + KEY.len()]);
-        rest = &rest[at + KEY.len()..];
+    while let Some((at, extra)) = HIDDEN_EXTRAS
+        .iter()
+        .filter_map(|e| rest.find(e).map(|at| (at, *e)))
+        .min_by_key(|(at, _)| *at)
+    {
+        out.push_str(&rest[..at + extra.len()]);
+        rest = &rest[at + extra.len()..];
         let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
         if end > 0 {
             out.push_str("<hidden>");
@@ -1030,6 +1168,36 @@ mod tests {
             "getprop ro.product.model"
         );
         assert_eq!(redact_secrets("--es code "), "--es code ");
+    }
+
+    #[test]
+    fn redacts_the_device_key_and_the_layout_backup() {
+        // Audit 2026-11-01 L2: as the TS bridge's redactSecrets (its redact tests).
+        let key = "0123456789abcdef".repeat(4);
+        let key_cmd = "am broadcast -n app.retv.home/.data.DeviceKeyReceiver -a app.retv.home.action.DEVICE_KEY -f 32 --es key";
+        let backup_cmd = "am broadcast -n app.retv.home/.data.LayoutBackupReceiver -a app.retv.home.action.LAYOUT_BACKUP -f 32 --es backup";
+        assert_eq!(
+            redact_secrets(&format!("{key_cmd} {key}")),
+            format!("{key_cmd} <hidden>")
+        );
+        assert_eq!(
+            redact_secrets(&format!("{key_cmd} '{key}'")),
+            format!("{key_cmd} <hidden>")
+        );
+        assert_eq!(
+            redact_secrets(&format!("{backup_cmd} eyJhIjoxfQ==")),
+            format!("{backup_cmd} <hidden>")
+        );
+        assert_eq!(
+            redact_secrets(&format!("{key_cmd} {key} && echo ok")),
+            format!("{key_cmd} <hidden> && echo ok")
+        );
+        let rebuilt = allow_command(&format!("{key_cmd} {key}")).expect("allowed");
+        assert!(!redact_secrets(&rebuilt).contains(&key));
+        assert_eq!(
+            redact_secrets("x --es keyboard on --es backups 1"),
+            "x --es keyboard on --es backups 1"
+        );
     }
 
     #[test]

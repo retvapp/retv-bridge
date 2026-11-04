@@ -226,6 +226,11 @@
         "from": "tv",
         "plainUtf8": "{\"t\":\"confirm\",\"next\":\"MDEyMzQ1Njc4OTo7PD0-Pw\"}",
         "nextHex": "303132333435363738393a3b3c3d3e3f"
+      },
+      {
+        "from": "ctl",
+        "plainUtf8": "{\"t\":\"confirm\",\"proof\":\"Ek0kyZbmIosCK2oGtcRMT5MLmC6EdKRTivZkMcPO9wo\"}",
+        "proofHex": "124d24c996e6228b022b6a06b5c44c4f930b982e8474a4538af66431c3cef70a"
       }
     ],
     "reject": [
@@ -298,7 +303,31 @@
         "name": "not-utf8",
         "from": "ctl",
         "plainHex": "7b2274223a22ff227d"
+      },
+      {
+        "name": "ctl-proof-31-bytes",
+        "from": "ctl",
+        "plainHex": "7b2274223a22636f6e6669726d222c2270726f6f66223a22456b306b795a626d496f73434b326f477463524d54354d4c6d433645644b525469765a6b4d63504f3977227d"
+      },
+      {
+        "name": "ctl-proof-and-next",
+        "from": "ctl",
+        "plainHex": "7b2274223a22636f6e6669726d222c2270726f6f66223a22456b306b795a626d496f73434b326f477463524d54354d4c6d433645644b525469765a6b4d63504f39776f222c226e657874223a224d4445794d7a51314e6a63344f546f375044302d5077227d"
+      },
+      {
+        "name": "tv-with-proof",
+        "from": "tv",
+        "plainHex": "7b2274223a22636f6e6669726d222c226e657874223a224d4445794d7a51314e6a63344f546f375044302d5077222c2270726f6f66223a22456b306b795a626d496f73434b326f477463524d54354d4c6d433645644b525469765a6b4d63504f39776f227d"
       }
     ]
+  },
+  "resume": {
+    "description": "The resume proof for handshake.json's qr case: transcript = SHA-256(\"retv-helper-v1 transcript\" ‖ modeByte ‖ roomId ‖ tvPub ‖ ctlPub ‖ tvNonce ‖ ctlNonce), proof = HMAC-SHA256(resume, \"retv-helper-v1 resume\" ‖ transcript). The TV seals resumeEventUtf8 right after its confirm.",
+    "case": "qr",
+    "resumeHex": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+    "transcriptHex": "c0352230c09e5ee305f899e5c8e9d9c450b5abea01aca270e39961c6aa3afff8",
+    "proofHex": "124d24c996e6228b022b6a06b5c44c4f930b982e8474a4538af66431c3cef70a",
+    "ctlConfirmUtf8": "{\"t\":\"confirm\",\"proof\":\"Ek0kyZbmIosCK2oGtcRMT5MLmC6EdKRTivZkMcPO9wo\"}",
+    "resumeEventUtf8": "{\"event\":\"resume\",\"secret\":\"QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl8\"}"
   }
 }

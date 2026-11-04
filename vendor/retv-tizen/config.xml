@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<widget xmlns:tizen="http://tizen.org/ns/widgets" xmlns="http://www.w3.org/ns/widgets" id="https://retv.app/tizen" version="0.2.0" viewmodes="maximized">
+    <tizen:application id="RetvHome00.ReTVHome" package="RetvHome00" required_version="3.0"/>
+    <name>ReTV Home</name>
+    <author href="https://retv.app" email="developer@klinkov.com">ReTV</author>
+    <content src="index.html"/>
+    <access origin="*" subdomains="true"/>
+    <icon src="icon.png"/>
+    <feature name="http://tizen.org/feature/screen.size.all"/>
+    <tizen:profile name="tv-samsung"/>
+    <feature name="http://tizen.org/feature/web.service"/>
+    <tizen:privilege name="http://tizen.org/privilege/application.info"/>
+    <tizen:service id="RetvHome00.Service">
+        <tizen:content src="service/dist/index.js"/>
+        <tizen:name>ReTVService</tizen:name>
+        <tizen:description>ReTV Home background service</tizen:description>
+    </tizen:service>
+    <tizen:privilege name="http://tizen.org/privilege/application.launch"/>
+    <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+    <tizen:privilege name="http://tizen.org/privilege/internet"/>
+    <tizen:privilege name="http://developer.samsung.com/privilege/adinfo"/>
+    <tizen:privilege name="http://developer.samsung.com/privilege/productinfo"/>
+    <tizen:privilege name="http://developer.samsung.com/privilege/network.public"/>
+    <tizen:metadata key="http://samsung.com/tv/metadata/prelaunch.support" value="true"/>
+    <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable" encryption="disable" install-location="auto" hwkey-event="enable"/>
+</widget>

@@ -1,4 +1,5 @@
-//! Parsing of mDNS answers into ADB services. Pure: no sockets, no clock.
+//! Parsing of mDNS answers into ADB services (and Fire TV's casting service,
+//! which stands in for adb there). Pure: no sockets, no clock.
 
 use std::collections::BTreeMap;
 use std::net::Ipv4Addr;
@@ -11,6 +12,9 @@ use simple_dns::Packet;
 pub const SERVICE_CONNECT: &str = "_adb-tls-connect._tcp.local";
 pub const SERVICE_PAIRING: &str = "_adb-tls-pairing._tcp.local";
 pub const SERVICE_ADB: &str = "_adb._tcp.local";
+/// Amazon Fire TV's casting receiver. Fire OS announces no adb service; this
+/// one tells us a Fire TV is there (its adb, once on, is 5555).
+pub const SERVICE_FIRE_TV: &str = "_amzn-wplay._tcp.local";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ServiceKind {
@@ -20,6 +24,18 @@ pub enum ServiceKind {
     Pairing,
     /// `_adb._tcp`: plain adb over TCP.
     Adb,
+    /// `_amzn-wplay._tcp`: an Amazon Fire TV (not an adb port).
+    FireTv,
+}
+
+impl ServiceKind {
+    /// Every kind, in query order.
+    pub const ALL: [ServiceKind; 4] = [
+        ServiceKind::Connect,
+        ServiceKind::Pairing,
+        ServiceKind::Adb,
+        ServiceKind::FireTv,
+    ];
 }
 
 impl ServiceKind {
@@ -28,6 +44,7 @@ impl ServiceKind {
             ServiceKind::Connect => SERVICE_CONNECT,
             ServiceKind::Pairing => SERVICE_PAIRING,
             ServiceKind::Adb => SERVICE_ADB,
+            ServiceKind::FireTv => SERVICE_FIRE_TV,
         }
     }
 }
@@ -44,7 +61,7 @@ pub struct MdnsService {
 fn split_instance(fqdn: &str) -> Option<(String, ServiceKind)> {
     let name = fqdn.trim_end_matches('.');
     let lower = name.to_ascii_lowercase();
-    for kind in [ServiceKind::Connect, ServiceKind::Pairing, ServiceKind::Adb] {
+    for kind in ServiceKind::ALL {
         let suffix = format!(".{}", kind.service_name());
         if lower.ends_with(&suffix) && name.len() > suffix.len() {
             return Some((name[..name.len() - suffix.len()].to_string(), kind));
@@ -57,7 +74,7 @@ fn host_key(name: &impl ToString) -> String {
     name.to_string().trim_end_matches('.').to_ascii_lowercase()
 }
 
-/// Resolve every adb service in one mDNS packet. The address comes from the
+/// Resolve every adb (and Fire TV) service in one mDNS packet. The address comes from the
 /// A record of the SRV target, else from `from` (the packet's source).
 /// Malformed packets give an empty list. No LAN filtering happens here; see
 /// [`group_services`].

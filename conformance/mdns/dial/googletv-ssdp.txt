@@ -1,0 +1,9 @@
+HTTP/1.1 200 OK
+CACHE-CONTROL: max-age=1800
+DATE: Wed, 04 Nov 2026 14:11:09 GMT
+EXT:
+LOCATION: http://192.168.88.232:8008/ssdp/device-desc.xml
+SERVER: Linux/5.15.196-android14, UPnP/1.0, Chromecast/1.6.18
+ST: urn:dial-multiscreen-org:service:dial:1
+USN: uuid:c75c257f-b9b5-e724-e61c-6dba53686ea2::urn:dial-multiscreen-org:service:dial:1
+

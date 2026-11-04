@@ -1,9 +1,9 @@
 [workspace]
 resolver = "2"
-members = ["crates/core", "crates/adb", "crates/mdns", "crates/cli", "app"]
+members = ["crates/core", "crates/adb", "crates/mdns", "crates/samsung", "crates/account", "crates/cli", "app"]
 
 [workspace.package]
-version = "1.0.1"
+version = "1.0.2"
 edition = "2021"
 license = "MIT"
 publish = false
@@ -13,6 +13,8 @@ publish = false
 retv-bridge-core = { path = "crates/core" }
 retv-bridge-adb = { path = "crates/adb" }
 retv-bridge-mdns = { path = "crates/mdns" }
+retv-bridge-samsung = { path = "crates/samsung" }
+retv-bridge-account = { path = "crates/account" }
 async-trait = "=0.1.92"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
@@ -47,8 +49,38 @@ tempfile = "=3.27.0"
 tokio-tungstenite = { version = "=0.29.0", default-features = false, features = ["handshake"] }
 futures-util = { version = "=0.3.34", default-features = false, features = ["sink", "std"] }
 httparse = "=1.10.1"
+# Samsung (Tizen) setup: RSA keys and CSRs for Samsung's certificate service and
+# widget signatures (RustCrypto, no ring/aws-lc), base64 for PEM and XML, the
+# TV's self-signed remote-key WebSocket on the OS's TLS.
+rsa = { version = "=0.9.10", features = ["sha2"] }
+base64 = "=0.22.1"
+zeroize = "=1.9.1"
+# Already in the tree through reqwest; lets the request body be zeroed when sent.
+bytes = "=1.12.1"
+native-tls = "=0.2.18"
+# Sign-in to ReTV: the OS key stores, the time zone (the cell rule) and the OS line, all
+# already in the lock file (native-tls, tauri, chrono, autostart), so no new crate is fetched.
+security-framework = "=3.7.0"
+windows-sys = "=0.61.2"
+iana-time-zone = "=0.1.65"
+os_info = { version = "=3.15.0", default-features = false }
 
 # The 64 MiB installApk fixtures hash their bodies; unoptimised SHA-256 makes
 # that take seconds in test builds.
 [profile.dev.package.sha2]
 opt-level = 3
+
+# RSA key generation in the Samsung tests is very slow unoptimised.
+[profile.dev.package.num-bigint-dig]
+opt-level = 3
+
+[profile.dev.package.rsa]
+opt-level = 3
+
+# Release: a small binary (companion-app size budget). panic stays "unwind": crates/core/src/session.rs
+# catches a panicking request handler (catch_unwind) and answers «internal» instead of taking the bridge down.
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true

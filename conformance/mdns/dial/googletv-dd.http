@@ -1,0 +1,38 @@
+HTTP/1.1 200 OK
+Application-URL:http://192.168.88.232:8008/apps/
+Content-Length:1077
+Content-Type:application/xml
+
+<?xml version="1.0"?>
+<root xmlns="urn:schemas-upnp-org:device-1-0">
+  <specVersion>
+    <major>1</major>
+    <minor>0</minor>
+  </specVersion>
+  <URLBase>http://192.168.88.232:8008</URLBase>
+  <device>
+    <deviceType>urn:dial-multiscreen-org:device:dial:1</deviceType>
+    <friendlyName>Гостиная</friendlyName>
+    <manufacturer>Xiaomi</manufacturer>
+    <modelName>MiTV-AFMU0</modelName>
+    <UDN>uuid:c75c257f-b9b5-e724-e61c-6dba53686ea2</UDN>
+    <iconList>
+      <icon>
+        <mimetype>image/png</mimetype>
+        <width>98</width>
+        <height>55</height>
+        <depth>32</depth>
+        <url>/setup/icon.png</url>
+      </icon>
+    </iconList>
+    <serviceList>
+      <service>
+        <serviceType>urn:dial-multiscreen-org:service:dial:1</serviceType>
+        <serviceId>urn:dial-multiscreen-org:serviceId:dial</serviceId>
+        <controlURL>/ssdp/notfound</controlURL>
+        <eventSubURL>/ssdp/notfound</eventSubURL>
+        <SCPDURL>/ssdp/notfound</SCPDURL>
+      </service>
+    </serviceList>
+  </device>
+</root>

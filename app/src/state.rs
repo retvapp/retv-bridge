@@ -56,6 +56,8 @@ pub enum Notice {
     PortBusy,
     LanDenied,
     PairingDisabled,
+    /// A Fire TV is on the network but not connected: «turn on ADB debugging» with the steps.
+    FireTvFound,
 }
 
 impl Notice {
@@ -64,6 +66,7 @@ impl Notice {
             Notice::PortBusy => "port.busy",
             Notice::LanDenied => "lan.denied",
             Notice::PairingDisabled => "pairing.disabled",
+            Notice::FireTvFound => "firetv.found",
         }
     }
 }
@@ -73,7 +76,19 @@ impl Notice {
 #[serde(rename_all = "lowercase")]
 pub enum View {
     Code,
+    Samsung,
     Log,
+}
+
+/// The first run's answers to «Какой у вас телевизор?».
+pub const TV_KINDS: [&str; 3] = ["android", "samsung", "unknown"];
+
+/// The tab a launch opens on: Samsung for those who said Samsung or «Не знаю».
+pub fn start_view(tv_kind: Option<&str>) -> View {
+    match tv_kind {
+        Some("samsung" | "unknown") => View::Samsung,
+        _ => View::Code,
+    }
 }
 
 pub struct AppState {
@@ -104,6 +119,8 @@ pub struct AppState {
     pub deep_link_at: Option<Instant>,
     /// mDNS rounds in a row that failed as «Local Network denied» and found nothing (see `discovery_result`).
     pub lan_denied_rounds: u8,
+    /// Fire TVs the last mDNS round found (their IPv4), connected or not (see `fire_tv_result`).
+    pub fire_tvs: Vec<String>,
 }
 
 /// Denied rounds in a row before the Local Network help shows. One is not enough: right after launch macOS can fail the
@@ -130,6 +147,7 @@ impl AppState {
             update: UpdateStatus::Idle,
             deep_link_at: None,
             lan_denied_rounds: 0,
+            fire_tvs: Vec::new(),
         }
     }
 
@@ -175,6 +193,29 @@ impl AppState {
         }
     }
 
+    /// The Fire TVs one mDNS round found (by `_amzn-wplay._tcp`). Fire OS announces no adb, so until one is connected
+    /// the window says how to turn on ADB debugging there.
+    pub fn fire_tv_result(&mut self, ips: Vec<String>) {
+        self.fire_tvs = ips;
+        self.refresh_fire_tv();
+    }
+
+    /// Shows «Fire TV found» while a found Fire TV has no adb connection (`<ip>:<port>`) yet.
+    fn refresh_fire_tv(&mut self) {
+        let waiting = self.fire_tvs.iter().any(|ip| {
+            !self.tvs.keys().any(|serial| {
+                serial
+                    .strip_prefix(ip.as_str())
+                    .is_some_and(|r| r.starts_with(':'))
+            })
+        });
+        if waiting {
+            self.add_notice(Notice::FireTvFound);
+        } else {
+            self.clear_notice(Notice::FireTvFound);
+        }
+    }
+
     pub fn notice_keys(&self) -> Vec<&'static str> {
         self.notices.iter().map(|n| n.key()).collect()
     }
@@ -208,9 +249,11 @@ impl AppState {
                     self.discovery_result(false, 1);
                 }
                 self.tvs.insert(serial.clone(), model.clone());
+                self.refresh_fire_tv();
             }
             BridgeEvent::TvDisconnected { serial } => {
                 self.tvs.remove(serial);
+                self.refresh_fire_tv();
             }
         }
         None
@@ -362,6 +405,14 @@ pub struct Settings {
     pub autostart: bool,
     /// Windows: the "still running in the notification area" balloon was shown.
     pub close_hint_shown: bool,
+    /// The first run's answer (one of `TV_KINDS`); none until the person picks.
+    pub tv_kind: Option<String>,
+    /// «Аккаунт на»: the site the person picked for «Войти в ReTV» (`world`
+    /// or `ru`); none means the language and time zone rule.
+    pub account_cell: Option<String>,
+    /// The window and tray language the person picked (`ru`, `uk`, `en`); none (or `system`)
+    /// follows the system's preferred languages.
+    pub lang: Option<String>,
 }
 
 impl Settings {
@@ -425,10 +476,8 @@ mod tests {
         s.server_started(Err(StartError::PortInUse));
         assert!(s.server.is_none());
         assert_eq!(s.notice_keys(), vec!["port.busy"]);
-        assert_eq!(
-            t(Lang::Ru, Notice::PortBusy.key()).split(' ').next(),
-            Some("Порт")
-        );
+        assert!(t(Lang::Ru, Notice::PortBusy.key()).contains("ReTV Bridge"));
+        assert!(t(Lang::Ru, "port.busy.tech").contains("5577"));
         // The app keeps running: the adb setup and the log still work.
         assert!(matches!(s.adb, AdbSetupState::NeedsConsent));
         s.push_log("still here".into());
@@ -468,6 +517,44 @@ mod tests {
     }
 
     #[test]
+    fn a_fire_tv_found_shows_the_adb_steps_until_it_connects() {
+        let mut s = state();
+        s.fire_tv_result(vec!["192.168.88.218".into()]);
+        assert_eq!(s.notice_keys(), vec!["firetv.found"]);
+        // Another TV whose address only starts the same is not this one.
+        s.on_event(&BridgeEvent::TvConnected {
+            serial: "192.168.88.21:5555".into(),
+            model: "MDZ-32-AA".into(),
+        });
+        assert_eq!(s.notice_keys(), vec!["firetv.found"]);
+        s.on_event(&BridgeEvent::TvConnected {
+            serial: "192.168.88.218:5555".into(),
+            model: "AFTMA08C15".into(),
+        });
+        assert!(s.notice_keys().is_empty());
+        s.on_event(&BridgeEvent::TvDisconnected {
+            serial: "192.168.88.218:5555".into(),
+        });
+        assert_eq!(s.notice_keys(), vec!["firetv.found"]);
+        // A round without a Fire TV clears it.
+        s.fire_tv_result(Vec::new());
+        assert!(s.notice_keys().is_empty());
+        for lang in [Lang::En, Lang::Ru, Lang::Uk] {
+            for k in [
+                "firetv.title",
+                "firetv.found",
+                "firetv.s1",
+                "firetv.s2",
+                "firetv.s3",
+                "firetv.s4",
+                "firetv.s5",
+            ] {
+                assert!(!t(lang, k).is_empty(), "{k}");
+            }
+        }
+    }
+
+    #[test]
     fn notices_are_unique_and_clearable() {
         let mut s = state();
         s.add_notice(Notice::LanDenied);
@@ -497,6 +584,42 @@ mod tests {
             self.0.borrow_mut().push("disable");
             Ok(())
         }
+    }
+
+    #[test]
+    fn tv_kind_is_kept_and_picks_the_start_tab() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(Settings::load(dir.path()).tv_kind, None);
+        let s = Settings {
+            tv_kind: Some("samsung".into()),
+            ..Settings::default()
+        };
+        s.save(dir.path()).unwrap();
+        assert_eq!(
+            Settings::load(dir.path()).tv_kind.as_deref(),
+            Some("samsung")
+        );
+        assert_eq!(start_view(None), View::Code);
+        assert_eq!(start_view(Some("android")), View::Code);
+        assert_eq!(start_view(Some("samsung")), View::Samsung);
+        assert_eq!(start_view(Some("unknown")), View::Samsung);
+        // Settings written by an older Bridge (no tvKind) still load.
+        std::fs::write(dir.path().join(SETTINGS_FILE), br#"{"autostart":true}"#).unwrap();
+        let old = Settings::load(dir.path());
+        assert!(old.autostart);
+        assert_eq!(old.tv_kind, None);
+        assert_eq!(old.lang, None);
+    }
+
+    #[test]
+    fn the_picked_language_is_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = Settings {
+            lang: Some("ru".into()),
+            ..Settings::default()
+        };
+        s.save(dir.path()).unwrap();
+        assert_eq!(Settings::load(dir.path()).lang.as_deref(), Some("ru"));
     }
 
     #[test]

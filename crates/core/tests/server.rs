@@ -15,7 +15,8 @@ use retv_bridge_core::api::{
     TransportError,
 };
 use retv_bridge_core::events::BridgeEvent;
-use retv_bridge_core::server::{start_server, BridgeServer, ServerConfig};
+use retv_bridge_core::protocol::{DEV_ORIGINS, MAX_UNPAIRED_SOCKETS};
+use retv_bridge_core::server::{start_server, BridgeServer, ServerConfig, UNPAIRED_SOCKET};
 use serde_json::{json, Value};
 use tokio::net::TcpStream;
 use tokio::sync::{broadcast, Semaphore};
@@ -169,6 +170,16 @@ async fn setup(hang_fetch: bool) -> Setup {
 }
 
 async fn setup_with(hang_fetch: bool, panic_pm: bool) -> Setup {
+    setup_cfg(hang_fetch, panic_pm, false, UNPAIRED_SOCKET).await
+}
+
+/// `dev_origins`: as a debug build; `unpaired`: how long a socket may stay without the token.
+async fn setup_cfg(
+    hang_fetch: bool,
+    panic_pm: bool,
+    dev_origins: bool,
+    unpaired: Duration,
+) -> Setup {
     let ops: Ops = Arc::default();
     let gate = Arc::new(Semaphore::new(0));
     let fetch_dropped = Arc::new(AtomicBool::new(false));
@@ -187,6 +198,8 @@ async fn setup_with(hang_fetch: bool, panic_pm: bool) -> Setup {
         clock: Arc::new(FixedClock),
         codes: Arc::new(Codes(Mutex::new(VecDeque::from(["482917".to_string()])))),
         version: "test".into(),
+        dev_origins,
+        unpaired_timeout: unpaired,
     })
     .await
     .unwrap();
@@ -605,12 +618,16 @@ async fn a_socket_runs_at_most_32_requests_at_once() {
 }
 
 async fn try_open(port: u16) -> Result<Ws, u16> {
+    try_open_from(port, "https://retv.app").await
+}
+
+async fn try_open_from(port: u16, origin: &str) -> Result<Ws, u16> {
     let tcp = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
     let mut req = format!("ws://127.0.0.1:{port}/")
         .into_client_request()
         .unwrap();
     req.headers_mut()
-        .insert("origin", HeaderValue::from_static("https://retv.app"));
+        .insert("origin", HeaderValue::from_str(origin).unwrap());
     match tokio_tungstenite::client_async(req, tcp).await {
         Ok((ws, _)) => Ok(ws),
         Err(tokio_tungstenite::tungstenite::Error::Http(r)) => Err(r.status().as_u16()),
@@ -623,8 +640,12 @@ async fn at_most_16_sockets_at_once() {
     let s = setup(false).await;
     let port = s.server.port();
     let mut sockets = Vec::new();
-    for _ in 0..16 {
-        sockets.push(open(port).await);
+    for i in 0..16 {
+        // Each sends the token first: at most MAX_UNPAIRED_SOCKETS may be open without it.
+        let mut ws = open(port).await;
+        send(&mut ws, json!({"id": i, "type": "hello"})).await;
+        assert_eq!(recv(&mut ws).await["result"]["paired"], json!(true));
+        sockets.push(ws);
     }
     assert_eq!(try_open(port).await.err(), Some(503));
     let mut first = sockets.remove(0);
@@ -691,4 +712,82 @@ async fn a_panic_during_the_install_still_removes_the_staged_file() {
     // The socket's install slot is free again.
     send(&mut a, install(3)).await;
     assert_eq!(recv(&mut a).await["error"], json!("internal"));
+}
+
+/// Sends a hello as given (no token added) and returns its `paired`.
+async fn hello_raw(ws: &mut Ws, given: Option<&str>) -> Value {
+    let mut msg = json!({"id": 1, "type": "hello"});
+    if let Some(t) = given {
+        msg["token"] = json!(t);
+    }
+    ws.send(Message::text(msg.to_string())).await.unwrap();
+    recv(ws).await["result"]["paired"].clone()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_release_bridge_refuses_the_dev_sites() {
+    // Audit 2026-11-01 L1: the dev sites' Origin only reaches a debug build.
+    let s = setup(false).await;
+    let port = s.server.port();
+    for o in DEV_ORIGINS {
+        assert_eq!(try_open_from(port, o).await.err(), Some(403), "{o}");
+    }
+    assert!(try_open_from(port, "https://retv.app").await.is_ok());
+    assert!(try_open_from(port, "https://ru.retv.app").await.is_ok());
+
+    let dev = setup_cfg(false, false, true, UNPAIRED_SOCKET).await;
+    for o in DEV_ORIGINS {
+        assert!(try_open_from(dev.server.port(), o).await.is_ok(), "{o}");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn at_most_4_sockets_without_the_token() {
+    // Audit 2026-11-01 L3: pages that never pair cannot take every socket.
+    let s = setup(false).await;
+    let port = s.server.port();
+    let mut sockets = Vec::new();
+    for _ in 0..MAX_UNPAIRED_SOCKETS {
+        sockets.push(open(port).await);
+    }
+    assert_eq!(try_open(port).await.err(), Some(503));
+    // A hello without the token does not count.
+    assert_eq!(hello_raw(&mut sockets[0], None).await, json!(false));
+    assert_eq!(try_open(port).await.err(), Some(503));
+    assert_eq!(hello_raw(&mut sockets[0], Some(TOKEN)).await, json!(true));
+    sockets.push(
+        try_open(port)
+            .await
+            .expect("a paired socket frees its place"),
+    );
+    // A closed unpaired socket frees its place too.
+    let mut gone = sockets.remove(1);
+    gone.close(None).await.unwrap();
+    while let Some(Ok(_)) = gone.next().await {}
+    let deadline = tokio::time::Instant::now() + WAIT;
+    while try_open(port).await.is_err() {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "the freed place never reopened"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_socket_without_the_token_is_closed_in_time() {
+    let s = setup_cfg(false, false, false, Duration::from_millis(150)).await;
+    let port = s.server.port();
+    let mut idle = open(port).await;
+    let mut paired = open(port).await;
+    assert_eq!(hello_raw(&mut paired, Some(TOKEN)).await, json!(true));
+    match tokio::time::timeout(WAIT, idle.next())
+        .await
+        .expect("never closed")
+    {
+        Some(Ok(Message::Close(Some(f)))) => assert_eq!(u16::from(f.code), 1008),
+        other => panic!("expected a 1008 close, got {other:?}"),
+    }
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(hello_raw(&mut paired, Some(TOKEN)).await, json!(true));
 }

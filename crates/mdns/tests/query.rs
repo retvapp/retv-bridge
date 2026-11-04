@@ -93,7 +93,7 @@ impl QuerySocket for FakeSocket {
 }
 
 #[test]
-fn query_sets_qu_bit_and_asks_three_services() {
+fn query_sets_qu_bit_and_asks_four_services() {
     let bytes = build_query();
     let pkt = Packet::parse(&bytes).unwrap();
     let names: Vec<String> = pkt.questions.iter().map(|q| q.qname.to_string()).collect();
@@ -102,7 +102,8 @@ fn query_sets_qu_bit_and_asks_three_services() {
         [
             "_adb-tls-connect._tcp.local",
             "_adb-tls-pairing._tcp.local",
-            "_adb._tcp.local"
+            "_adb._tcp.local",
+            "_amzn-wplay._tcp.local"
         ]
     );
     assert!(pkt
@@ -112,7 +113,7 @@ fn query_sets_qu_bit_and_asks_three_services() {
     // Raw wire check: every question ends with class 0x8001 (IN + QU).
     assert_eq!(
         bytes.windows(4).filter(|w| w == &[0, 12, 0x80, 1]).count(),
-        3
+        4
     );
 }
 

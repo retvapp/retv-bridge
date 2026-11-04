@@ -1,0 +1,194 @@
+/* ReTV Home for Samsung. Board px 1920×1080, the geometry of ReTV Home on Android (ui/home: TopArea, Shelf,
+   HomeScreen). Only transform and opacity animate; every box that changes on a key press has a fixed size. */
+html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; }
+body {
+  position: relative; color: #fff; -webkit-font-smoothing: antialiased;
+  font: 26px/1.25 "SamsungOne", "Samsung Sans", Inter, Arial, sans-serif;
+  background: #141a2b;
+}
+/* The gradient sits on its own compositor layer, painted once: as a body background the 2021 TV repainted it on
+   every key press (frames up to 300 ms; measured on the owner's QE55Q67AA). */
+#bg {
+  position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; z-index: -1; pointer-events: none;
+  background: radial-gradient(1200px 520px at 50% 62%, rgba(150, 90, 40, .55), transparent 70%),
+              linear-gradient(180deg, #121a2e 0%, #1a2238 45%, #0b0b10 100%);
+  transform: translateZ(0); will-change: transform;
+}
+h2 { margin: 0; font-size: 40px; font-weight: 600; }
+
+/* Profile chip, top left: the avatar disc and the name in one pill 64 high; focused: the white plate. */
+#chip {
+  position: absolute; left: 96px; top: 56px; height: 64px; box-sizing: border-box; padding: 0 26px 0 6px;
+  display: flex; align-items: center; border-radius: 32px; white-space: nowrap;
+  background: rgba(255, 255, 255, .12); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12);
+}
+#chip.f { background: #fff; color: #1d1d1f; box-shadow: none; }
+#chipDisc {
+  width: 52px; height: 52px; border-radius: 50%; background: #0a64f0; color: #fff;
+  font-style: normal; font-size: 26px; line-height: 52px; font-weight: 600; text-align: center;
+}
+#chipName { margin-left: 14px; font-size: 28px; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+#chipPro { margin-left: 14px; padding: 2px 12px; border-radius: 14px; background: #0a64f0; color: #fff; font-size: 20px; }
+
+/* Clock block, right-aligned under the top line. */
+#when { position: absolute; right: 96px; top: 140px; text-align: right; }
+#clock { font-size: 72px; line-height: 76px; font-weight: 300; }
+#date { font-size: 26px; line-height: 32px; color: rgba(255, 255, 255, .78); }
+
+/* Hero: the focused app large (544×306 r32 from y 128, centred), its name under it. */
+#hero { position: absolute; left: 360px; top: 128px; width: 1200px; height: 420px; contain: strict; }
+#heroArt {
+  position: relative; width: 544px; height: 306px; margin: 0 auto; border-radius: 32px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, .12);
+  font-size: 72px; font-weight: 700;
+}
+#heroIcon { position: absolute; left: 192px; top: 73px; width: 160px; height: 160px; background: center / contain no-repeat; }
+/* A focused folder: up to 4 of its apps as squares in the hero. */
+#heroMinis { position: absolute; left: 0; top: 0; width: 544px; height: 306px; display: flex; align-items: center; justify-content: center; }
+#heroMinis:empty { display: none; }
+.hm {
+  width: 104px; height: 104px; margin: 0 10px; border-radius: 22px; background: rgba(255, 255, 255, .14) center / 70% no-repeat;
+  font-style: normal; font-size: 52px; line-height: 104px; font-weight: 700; text-align: center;
+}
+#heroName {
+  margin-top: 14px; height: 72px; font-size: 56px; line-height: 72px; font-weight: 600; text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Dock glass at y 740, 150 high, hugging its tiles; tiles 160×90 every 180 px, 24 px inset. */
+#dock { position: absolute; top: 740px; height: 150px; border-radius: 48px; background: rgba(255, 255, 255, .08); }
+.tile {
+  position: absolute; width: 160px; height: 90px; box-sizing: border-box; padding: 0 10px; border-radius: 18px;
+  display: flex; align-items: center; justify-content: center; text-align: center; overflow: hidden;
+  font-size: 24px; font-weight: 700; background: rgba(255, 255, 255, .14);
+  transition: transform .12s ease-out;
+}
+.tile.f { transform: scale(1.1); z-index: 1; }
+.tile.plain { flex-direction: column; font-size: 18px; font-weight: 500; }
+.tile.plain i { width: 44px; height: 44px; margin-bottom: 6px; background: center / contain no-repeat; flex: none; }
+.tile.plain span { max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ring {
+  position: absolute; left: 0; top: 0; width: 160px; height: 90px; border-radius: 18px; z-index: 2; pointer-events: none;
+  border: 4px solid #fff; margin: -4px 0 0 -4px; transition: transform .12s ease-out; will-change: transform;
+}
+
+/* «Все приложения ▼» under the dock: a button (▼ from the dock focuses it, OK or ▼ opens the list). */
+#allLine { position: absolute; right: 96px; top: 912px; color: rgba(255, 255, 255, .85); }
+.chev {
+  display: inline-block; width: 12px; height: 12px; margin: 0 4px 6px 14px; vertical-align: middle;
+  border: solid currentColor; border-width: 0 3px 3px 0; transform: rotate(45deg);
+}
+#status, #hint { position: absolute; left: 96px; top: 924px; margin: 0; max-width: 1180px; color: rgba(255, 255, 255, .78); }
+#hint { font-size: 24px; color: rgba(255, 255, 255, .6); }
+
+/* Overlays: opacity only; hidden ones are not painted. */
+.layer { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; opacity: 0; visibility: hidden; transition: opacity .16s, visibility 0s linear .16s; z-index: 10; }
+.layer.on { opacity: 1; visibility: visible; transition: opacity .16s; }
+
+/* «Все приложения»: 9 columns, 6 rows in view; the grid scrolls by a transform. */
+#all { background: rgba(8, 10, 18, .95); }
+#allTitle { position: absolute; left: 128px; top: 96px; }
+#gridBox { position: absolute; left: 108px; top: 180px; width: 1704px; height: 820px; overflow: hidden; }
+#grid { position: absolute; left: 20px; top: 20px; transition: transform .16s ease-out; will-change: transform; }
+
+/* Settings: a sheet from the right. */
+#panel { background: rgba(0, 0, 0, .45); }
+#sheet {
+  position: absolute; right: 0; top: 0; width: 680px; height: 1080px; box-sizing: border-box; padding: 72px 64px;
+  background: #1c1f2b; transform: translate3d(60px, 0, 0); transition: transform .16s ease-out;
+}
+#panel.on #sheet { transform: none; }
+#panelTitle { margin-bottom: 40px; }
+.acc b { display: block; font-size: 30px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acc span { display: block; margin-top: 6px; font-size: 24px; color: rgba(255, 255, 255, .7); }
+.item { margin-top: 28px; padding: 20px 28px; border-radius: 20px; background: rgba(255, 255, 255, .08); }
+.item b { display: block; font-size: 30px; font-weight: 600; }
+.item span { display: block; margin-top: 4px; font-size: 22px; color: rgba(255, 255, 255, .7); }
+.item.f { background: #fff; color: #1d1d1f; }
+.item.f span { color: rgba(29, 29, 31, .7); }
+.sign { margin-top: 36px; }
+.sign p { margin: 0; font-size: 26px; }
+.code { margin: 20px 0 12px; font-size: 84px; line-height: 1; font-weight: 700; letter-spacing: 6px; }
+.msg { margin: 16px 0 0; font-size: 24px; color: rgba(255, 255, 255, .78); }
+.ver { position: absolute; left: 64px; bottom: 56px; margin: 0; font-size: 20px; color: rgba(255, 255, 255, .5); }
+
+/* «Оптимизация»: three cards, OK opens a page; the page scrolls by a transform. Flat fills, no shadows. */
+#opt { background: #0b0d16; }
+#optTitle { position: absolute; left: 128px; top: 96px; }
+#optCards { position: absolute; left: 128px; top: 210px; width: 1664px; height: 600px; display: flex; }
+.card {
+  position: relative; flex: none; width: 520px; height: 560px; margin-right: 52px; box-sizing: border-box; padding: 44px 40px;
+  border-radius: 32px; background: rgba(255, 255, 255, .08); transition: transform .12s ease-out;
+}
+.card:last-child { margin-right: 0; }
+.card.f { background: #fff; color: #1d1d1f; transform: scale(1.03); }
+.card h3 { margin: 0 0 24px; font-size: 36px; font-weight: 600; }
+.card p { margin: 0 0 14px; font-size: 24px; color: rgba(255, 255, 255, .78); }
+.card.f p { color: rgba(29, 29, 31, .75); }
+.card .go { position: absolute; left: 40px; bottom: 40px; margin: 0; font-weight: 600; color: #fff; }
+.card.f .go { color: #0a64f0; }
+#optPage { position: absolute; left: 108px; top: 190px; width: 1280px; height: 840px; overflow: hidden; }
+#optIn {
+  position: absolute; left: 0; top: 0; width: 1280px; box-sizing: border-box; padding: 10px 20px 20px;
+  transition: transform .16s ease-out; will-change: transform;
+}
+#optIn h3 { margin: 0 0 20px; font-size: 40px; font-weight: 600; }
+#optIn p { margin: 0 0 14px; max-width: 1140px; font-size: 26px; }
+#optIn .lead { font-size: 30px; font-weight: 600; }
+#optIn .ok { color: #7be08f; }
+#optIn .msg { color: rgba(255, 255, 255, .7); font-size: 24px; }
+#optIn .code { margin: 12px 0 20px; font-size: 72px; }
+.steps { margin: 6px 0 12px; padding-left: 40px; max-width: 1100px; font-size: 26px; }
+.steps li { margin-bottom: 10px; }
+#optIn .item { margin-top: 16px; max-width: 1100px; }
+.item.app { display: flex; align-items: center; padding: 14px 28px; }
+.box {
+  position: relative; flex: none; width: 34px; height: 34px; margin-right: 24px; box-sizing: border-box;
+  border: 3px solid currentColor; border-radius: 8px;
+}
+.item.app.on .box::after {
+  content: ""; position: absolute; left: 9px; top: 2px; width: 8px; height: 17px;
+  border: solid currentColor; border-width: 0 4px 4px 0; transform: rotate(45deg);
+}
+
+/* Dock editing (as ReTV Home on Android): the ring turns blue while a tile moves; «Все приложения» marks the docked
+   apps while «Изменить док» is on. Flat fills, no shadows. */
+.ring.mv { border-color: #3d8bff; }
+#allEdit { position: absolute; right: 128px; top: 92px; }
+#allHint { position: absolute; left: 128px; top: 148px; margin: 0; font-size: 22px; color: rgba(255, 255, 255, .7); }
+.btn {
+  height: 56px; box-sizing: border-box; padding: 0 32px; border-radius: 28px; line-height: 56px; white-space: nowrap;
+  font-size: 26px; font-weight: 600; background: rgba(255, 255, 255, .12);
+}
+.btn.f { background: #fff; color: #1d1d1f; }
+#all.edit .tile.in::after {
+  content: "✓"; position: absolute; right: 6px; top: 6px; width: 28px; height: 28px; border-radius: 14px;
+  background: #0a64f0; color: #fff; font-size: 18px; line-height: 28px; font-weight: 700; text-align: center;
+}
+
+/* The app menu: a sheet in the middle over a dimmed screen; a long list (folder names) scrolls by a transform. */
+#menu { background: rgba(0, 0, 0, .55); }
+#menuBox {
+  position: absolute; left: 640px; top: 120px; width: 640px; box-sizing: border-box; padding: 44px 56px;
+  border-radius: 32px; background: #1c1f2b;
+}
+#menuTitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#menuList { max-height: 660px; margin-top: 4px; overflow: hidden; }
+#menuBody { position: relative; padding-top: 4px; transition: transform .12s ease-out; }
+#menuBody .item { margin-top: 16px; padding: 16px 28px; }
+
+/* Folders: a tile shows up to 4 of its apps in a row and the name under them; an open folder is a layer of its own.
+   «Скрытые (N)» ends «Все приложения» when apps are hidden. Flat fills only. */
+.tile.folder { flex-direction: column; font-size: 18px; font-weight: 500; background: rgba(255, 255, 255, .2); }
+.tile.folder span { max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.minis { display: flex; margin-bottom: 6px; }
+.m {
+  width: 30px; height: 30px; margin: 0 2px; border-radius: 8px; background: rgba(255, 255, 255, .16) center / 80% no-repeat;
+  font-style: normal; font-size: 17px; line-height: 30px; font-weight: 700; text-align: center;
+}
+.tile.more { font-size: 20px; font-weight: 600; background: transparent; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .35); }
+#fold { background: rgba(8, 10, 18, .95); }
+#foldTitle { position: absolute; left: 128px; top: 96px; }
+#foldHint { position: absolute; left: 128px; top: 148px; margin: 0; font-size: 22px; color: rgba(255, 255, 255, .7); }
+#foldBox { position: absolute; left: 108px; top: 200px; width: 1704px; height: 800px; overflow: hidden; }
+#foldGrid { position: absolute; left: 20px; top: 20px; }

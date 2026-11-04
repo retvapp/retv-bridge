@@ -7,10 +7,17 @@ use std::path::PathBuf;
 
 use rand::rngs::OsRng;
 use rand::RngCore;
-use retv_bridge_core::protocol::{ALLOWED_ORIGINS, BRIDGE_PORT};
+use retv_bridge_core::protocol::{origin_allowed, BRIDGE_PORT};
 
-/// The site opened by default (the local dev server, as in the TS bridge).
-pub const DEFAULT_SITE: &str = "http://127.0.0.1:5180";
+/// The site opened by default: the local dev server in a debug build (as the
+/// TS bridge with `--dev`), the ReTV site in a release.
+pub fn default_site(dev: bool) -> &'static str {
+    if dev {
+        "http://127.0.0.1:5180"
+    } else {
+        "https://retv.app"
+    }
+}
 /// A re-shown code (pairStart again while it is live) is printed again at most this often.
 pub const REPRINT_MS: u64 = 10_000;
 
@@ -18,7 +25,8 @@ pub const USAGE: &str = "usage: retv-bridge-cli [--port 5577] [--no-open] [--sit
 
   --port N     listen on 127.0.0.1:N (default 5577)
   --no-open    do not open the browser; the site then pairs with a 6-digit code
-  --site URL   the ReTV site to open (default: RETV_SITE_URL or http://127.0.0.1:5180)";
+  --site URL   the ReTV site to open (default: RETV_SITE_URL, else https://retv.app;
+               a debug build also takes the local dev site, http://127.0.0.1:5180 by default)";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Args {
@@ -92,8 +100,8 @@ fn base64url(bytes: &[u8]) -> String {
 }
 
 /// The site's origin when it is on the bridge's allow-list, else `None`: the
-/// token only ever goes to a ReTV site.
-pub fn site_to_open(site: &str) -> Option<String> {
+/// token only ever goes to a ReTV site. `dev`: also the local dev site (debug builds).
+pub fn site_to_open(site: &str, dev: bool) -> Option<String> {
     let (scheme, rest) = site.split_once("://")?;
     let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
     let mut authority = rest[..end].to_ascii_lowercase();
@@ -107,7 +115,7 @@ pub fn site_to_open(site: &str) -> Option<String> {
         authority = stripped.to_string();
     }
     let origin = format!("{scheme}://{authority}");
-    ALLOWED_ORIGINS.contains(&origin.as_str()).then_some(origin)
+    origin_allowed(&origin, dev).then_some(origin)
 }
 
 /// The link the bridge opens: the token in the fragment, which browsers never
@@ -216,22 +224,26 @@ mod tests {
 
     #[test]
     fn only_allowed_sites_get_the_token() {
+        // The dev site only for a debug build (audit 2026-11-01 L1).
+        assert_eq!(site_to_open("http://127.0.0.1:5180", false), None);
         assert_eq!(
-            site_to_open("http://127.0.0.1:5180"),
+            site_to_open("http://127.0.0.1:5180", true),
             Some("http://127.0.0.1:5180".into())
         );
+        assert_eq!(default_site(false), "https://retv.app");
+        assert_eq!(default_site(true), "http://127.0.0.1:5180");
         assert_eq!(
-            site_to_open("https://retv.app/connect"),
+            site_to_open("https://retv.app/connect", false),
             Some("https://retv.app".into())
         );
         assert_eq!(
-            site_to_open("https://RETV.app:443/"),
+            site_to_open("https://RETV.app:443/", false),
             Some("https://retv.app".into())
         );
-        assert_eq!(site_to_open("https://retv.app.evil.example"), None);
-        assert_eq!(site_to_open("https://user@retv.app"), None);
-        assert_eq!(site_to_open("http://retv.app"), None);
-        assert_eq!(site_to_open("not a url"), None);
+        assert_eq!(site_to_open("https://retv.app.evil.example", true), None);
+        assert_eq!(site_to_open("https://user@retv.app", true), None);
+        assert_eq!(site_to_open("http://retv.app", true), None);
+        assert_eq!(site_to_open("not a url", true), None);
         assert_eq!(
             connect_link("https://retv.app", "T"),
             "https://retv.app/connect?path=bridge#bridgeToken=T" // leakcheck:allow

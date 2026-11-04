@@ -1,10 +1,14 @@
 //! ReTV Bridge, the tray app: the bridge server, Google's adb fetched on
 //! first run (with consent), a small window with the pairing code and the
-//! command log, and a tray menu.
+//! command log, a tab that sets up Samsung TVs, and a tray menu.
 
+pub mod account;
+mod activate;
 pub mod adb_setup;
 pub mod browser;
+pub mod clipboard;
 pub mod i18n;
+pub mod samsung;
 pub mod signals;
 pub mod site;
 pub mod state;
@@ -29,7 +33,7 @@ use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_notification::NotificationExt;
 
 use crate::i18n::{tf, Lang};
-use crate::state::{format_code, new_token, AppState, Settings, View};
+use crate::state::{format_code, new_token, start_view, AppState, Settings, View};
 use crate::tray::SettingsStore;
 
 pub type Shared = Arc<Mutex<AppState>>;
@@ -74,7 +78,15 @@ fn discoverer(app: AppHandle) -> Discoverer {
             let st = shared(&app);
             match r {
                 Ok(found) => {
-                    lock(&st).discovery_result(false, found.len());
+                    let fire_tvs = retv_bridge_mdns::group_services(&found)
+                        .into_iter()
+                        .filter(|tv| tv.fire_tv)
+                        .map(|tv| tv.ip)
+                        .collect();
+                    let mut s = lock(&st);
+                    s.discovery_result(false, found.len());
+                    s.fire_tv_result(fire_tvs);
+                    drop(s);
                     found.iter().map(MdnsService::from).collect()
                 }
                 Err(e) => {
@@ -138,6 +150,8 @@ async fn start(app: AppHandle) {
         clock: Arc::new(SystemClock),
         codes: Arc::new(OsCodeSource),
         version: env!("CARGO_PKG_VERSION").to_string(),
+        dev_origins: retv_bridge_core::protocol::DEV_BUILD,
+        unpaired_timeout: retv_bridge_core::server::UNPAIRED_SOCKET,
     })
     .await;
     let events = result.as_ref().ok().map(|s| s.events());
@@ -206,7 +220,9 @@ async fn start(app: AppHandle) {
                 adb_setup::start(&app, path).await;
             }
         }
-        None => window::show(&app, View::Code),
+        // First run, or the tools are gone: the window, on the tab the
+        // person's TV needs (a Samsung owner is never asked for adb).
+        None => window::show(&app, start_view(window::tv_kind(&app).as_deref())),
     }
 }
 
@@ -242,34 +258,79 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(state)
+        .manage(samsung::SamsungShared::default())
         .invoke_handler(tauri::generate_handler![
             window::get_state,
             window::get_strings,
+            window::set_lang,
             window::accept_adb_download,
             window::pick_adb_zip,
             window::retry_adb,
             window::open_site,
             window::show_log,
             window::open_terms,
+            window::set_view,
+            window::set_tv_kind,
+            window::restart_bridge,
+            samsung::samsung_view,
+            samsung::samsung_pass,
+            samsung::samsung_forget,
+            samsung::samsung_sign_in_cancel,
+            samsung::samsung_sign_in_reopen,
+            samsung::samsung_open_account,
+            samsung::samsung_privacy_stop,
+            samsung::samsung_scan,
+            samsung::samsung_add_ip,
+            samsung::samsung_select,
+            samsung::samsung_refresh,
+            samsung::samsung_sign_in,
+            samsung::samsung_install,
+            samsung::samsung_reinstall,
+            samsung::samsung_install_cancel,
+            samsung::samsung_keep_installed,
+            samsung::samsung_apps,
+            samsung::samsung_tick,
+            samsung::samsung_remove,
+            samsung::samsung_privacy_start,
+            samsung::samsung_remote_pair,
+            samsung::samsung_privacy,
+            samsung::samsung_privacy_pick,
+            account::account_sign_in,
+            account::account_cancel,
+            account::account_reopen,
+            account::account_dismiss,
+            account::account_sign_out,
+            account::account_set_cell,
+            account::account_tvs,
         ])
         .on_window_event(|w, event| {
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                window::on_close(w.app_handle(), w);
+            // Closing destroys the window (its WebView's memory goes too);
+            // Bridge stays in the tray and makes it again when asked.
+            if let WindowEvent::CloseRequested { .. } = event {
+                window::on_close(w.app_handle());
             }
         })
         .setup(move |app| {
+            // A normal app on macOS: an icon in the Dock and in Cmd+Tab, so people can see that Bridge is running
+            // and find it (owner, 2026-11-04). The tray icon stays; clicking the Dock icon opens the window.
             #[cfg(target_os = "macos")]
-            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            app.set_activation_policy(tauri::ActivationPolicy::Regular);
 
             let config_dir = app
                 .path()
                 .app_config_dir()
                 .unwrap_or_else(|_| std::env::temp_dir().join("app.retv.bridge"));
+            let settings = Settings::load(&config_dir);
+            // The language the person picked in Bridge, else the system's preferred languages.
+            let lang = i18n::pick(settings.lang.as_deref(), lang);
+            lock(&shared(app.handle())).locale = lang;
             app.manage(SettingsStore {
-                settings: Mutex::new(Settings::load(&config_dir)),
+                settings: Mutex::new(settings),
                 dir: config_dir,
             });
+            // «Войти в ReTV»: the sign-in of an earlier run comes back from the key store.
+            app.manage(account::init(app.handle(), lang));
+            account::restore(app.handle());
 
             let handle = app.handle().clone();
             #[cfg(any(windows, target_os = "linux"))]
@@ -281,6 +342,7 @@ pub fn run() {
             });
 
             tray::build(app.handle(), lang)?;
+            activate::reveal_on_activate(app.handle());
             updates::init(app.handle());
             signals::quit_on_termination(app.handle());
             tauri::async_runtime::spawn(start(app.handle().clone()));
@@ -289,13 +351,19 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building the ReTV Bridge app");
 
-    // Closing the window only hides it (`on_window_event`), so the app never
-    // runs out of windows; it ends through «Выйти», an update or the system
-    // (log out). However it ends, the private adb server goes too.
-    app.run(|app, event| {
-        if let RunEvent::Exit = event {
-            stop_adb_on_exit(app);
-        }
+    // Closing the window destroys it (`on_window_event`); the last window
+    // going does not end the app (no exit code: `prevent_exit`). It ends
+    // through «Выйти» (`app.exit(0)`), an update or the system (log out).
+    // However it ends, the private adb server goes too.
+    app.run(|app, event| match event {
+        RunEvent::ExitRequested {
+            code: None, api, ..
+        } => api.prevent_exit(),
+        RunEvent::Exit => stop_adb_on_exit(app),
+        // A click on the Dock icon (or Cmd+Tab to Bridge with no window) opens the window.
+        #[cfg(target_os = "macos")]
+        RunEvent::Reopen { .. } => window::reveal(app),
+        _ => {}
     });
 }
 

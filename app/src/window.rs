@@ -4,13 +4,15 @@
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use tauri::{AppHandle, Manager, WebviewWindow};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
 
+use crate::account::{self, AccountUi};
 use crate::adb_setup::{self, Source};
 use crate::i18n::{self, Lang, Strings};
-use crate::state::{format_code, AdbSetupState, AppState, View};
-use crate::{browser, lock, shared, site};
+use crate::state::{format_code, start_view, AdbSetupState, AppState, View, TV_KINDS};
+use crate::tray::SettingsStore;
+use crate::{browser, lock, shared, site, tray};
 
 pub const MAIN: &str = "main";
 const TERMS_URL: &str = "https://developer.android.com/studio/terms";
@@ -33,12 +35,17 @@ pub struct UiStrings {
     lang: Lang,
     strings: &'static Strings,
     windows: bool,
+    /// The language menu's choice: `system`, `ru`, `uk` or `en`.
+    lang_choice: &'static str,
 }
 
 /// What the window polls (every 700 ms): no strings.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StateView {
+    /// The language now: the window reads its strings again when it changed (the tray's
+    /// «Язык» menu).
+    lang: Lang,
     view: View,
     view_seq: u64,
     adb: AdbView,
@@ -47,23 +54,74 @@ pub struct StateView {
     code: Option<String>,
     tv: String,
     tv_connected: bool,
+    /// The connected Android TVs' models.
+    tv_models: Vec<String>,
+    /// The bridge server runs (not: its port was taken).
+    running: bool,
+    /// The first run's answer, none until the person picks.
+    tv_kind: Option<String>,
     log_len: usize,
+    /// «Войти в ReTV»: the sign-in sheet, the header's account, its TVs.
+    account: Option<AccountUi>,
 }
 
-pub fn ui_strings(s: &AppState) -> UiStrings {
+pub fn ui_strings(s: &AppState, lang_choice: &'static str) -> UiStrings {
     UiStrings {
         lang: s.locale,
         strings: i18n::strings(s.locale),
         windows: cfg!(windows),
+        lang_choice,
     }
 }
 
-pub fn state_view(s: &AppState) -> StateView {
+fn saved_lang_choice(app: &AppHandle) -> &'static str {
+    let saved = app.try_state::<SettingsStore>().and_then(|store| {
+        store
+            .settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .lang
+            .clone()
+    });
+    tray::lang_choice(saved.as_deref())
+}
+
+/// The language menu (window or tray): kept in the settings, the window and the tray follow.
+pub fn set_language(app: &AppHandle, choice: &str) {
+    if !i18n::valid_choice(choice) {
+        return;
+    }
+    if let Some(store) = app.try_state::<SettingsStore>() {
+        let mut settings = store.settings.lock().unwrap_or_else(|e| e.into_inner());
+        settings.lang = (choice != "system").then(|| choice.to_string());
+        if let Err(e) = settings.save(&store.dir) {
+            lock(&shared(app)).push_log(format!("[bridge] could not save settings: {e}"));
+        }
+    }
+    let lang = i18n::pick(Some(choice), Lang::detect());
+    {
+        let st = shared(app);
+        let mut s = lock(&st);
+        s.locale = lang;
+        s.push_log(format!("[bridge] language: {choice} ({})", lang.code()));
+    }
+    // The window sees the new `lang` in its next poll and reads its strings again.
+    tray::relabel(app, tray::lang_choice(Some(choice)));
+}
+
+#[tauri::command]
+pub fn set_lang(app: AppHandle, choice: String) -> UiStrings {
+    set_language(&app, &choice);
+    get_strings(app)
+}
+
+pub fn state_view(s: &AppState, tv_kind: Option<String>, account: Option<AccountUi>) -> StateView {
     let (done, total) = match &s.adb {
         AdbSetupState::Downloading { done, total } => (*done, *total),
         _ => (0, 0),
     };
     StateView {
+        lang: s.locale,
         view: s.view,
         view_seq: s.view_seq,
         adb: AdbView {
@@ -80,18 +138,26 @@ pub fn state_view(s: &AppState) -> StateView {
             .map(|(c, _)| format_code(&c)),
         tv: s.tv_status(),
         tv_connected: !s.tvs.is_empty(),
+        tv_models: s.tvs.values().cloned().collect(),
+        running: s.server.is_some(),
+        tv_kind,
         log_len: s.log.len(),
+        account,
     }
 }
 
 #[tauri::command]
 pub fn get_strings(app: AppHandle) -> UiStrings {
-    ui_strings(&lock(&shared(&app)))
+    let choice = saved_lang_choice(&app);
+    ui_strings(&lock(&shared(&app)), choice)
 }
 
 #[tauri::command]
 pub fn get_state(app: AppHandle) -> StateView {
-    state_view(&lock(&shared(&app)))
+    let kind = tv_kind(&app);
+    // Before the state lock: the account's own lock is never taken inside it.
+    let account = account::ui_of(&app);
+    state_view(&lock(&shared(&app)), kind, account)
 }
 
 #[tauri::command]
@@ -209,21 +275,107 @@ pub fn main_window(app: &AppHandle) -> Option<WebviewWindow> {
 /// Shows and focuses the window on `view`.
 pub fn show(app: &AppHandle, view: View) {
     lock(&shared(app)).request_view(view);
-    if let Some(w) = main_window(app) {
-        let _ = w.unminimize();
-        let _ = w.show();
-        let _ = w.set_focus();
-    }
+    reveal(app);
 }
 
-/// Closing the window only hides it; on Windows the first time says where
-/// the bridge went.
-pub fn on_close(app: &AppHandle, window: &tauri::Window) {
-    let _ = window.hide();
+/// Shows and focuses the window on the tab it last had («Открыть окно
+/// Bridge»). The window exists only while it is open: it is made here and
+/// destroyed on close, so the WebView's memory is freed while Bridge sits in
+/// the tray. Everything it shows lives in Rust, so a new one is up at once.
+pub fn reveal(app: &AppHandle) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(w) = main_window(&handle) {
+            let _ = w.unminimize();
+            let _ = w.show();
+            let _ = w.set_focus();
+            return;
+        }
+        let built = WebviewWindowBuilder::new(&handle, MAIN, WebviewUrl::App("index.html".into()))
+            .title("ReTV Bridge")
+            .inner_size(WIDTH, HEIGHT)
+            .min_inner_size(MIN_WIDTH, MIN_HEIGHT)
+            .resizable(true)
+            .maximizable(false)
+            .center()
+            .focused(true)
+            .build();
+        match built {
+            Ok(w) => {
+                let _ = w.set_focus();
+            }
+            Err(e) => {
+                lock(&shared(&handle)).push_log(format!("[bridge] could not open the window: {e}"));
+            }
+        }
+    });
+}
+
+/// The window: 460 × 680, resizable down to 420 × 600.
+pub const WIDTH: f64 = 460.0;
+pub const HEIGHT: f64 = 680.0;
+pub const MIN_WIDTH: f64 = 420.0;
+pub const MIN_HEIGHT: f64 = 600.0;
+
+/// Closing the window destroys it (Bridge stays in the tray); on Windows the
+/// first time says where the bridge went.
+pub fn on_close(app: &AppHandle) {
     #[cfg(windows)]
     crate::tray::first_hide_hint(app);
     #[cfg(not(windows))]
     let _ = app;
+}
+
+/// The window's own tab clicks: kept here, so a window made again opens on
+/// the same tab. No `view_seq` bump: that is for the tray's requests.
+#[tauri::command]
+pub fn set_view(app: AppHandle, view: String) {
+    let v = match view.as_str() {
+        "code" => View::Code,
+        "samsung" => View::Samsung,
+        "log" => View::Log,
+        _ => return,
+    };
+    lock(&shared(&app)).view = v;
+}
+
+/// The first run's «Какой у вас телевизор?»: saved; Samsung and «Не знаю» go
+/// to the Samsung tab.
+#[tauri::command]
+pub fn set_tv_kind(app: AppHandle, kind: String) {
+    if !TV_KINDS.contains(&kind.as_str()) {
+        return;
+    }
+    {
+        let store = app.state::<SettingsStore>();
+        let mut settings = store.settings.lock().unwrap_or_else(|e| e.into_inner());
+        settings.tv_kind = Some(kind.clone());
+        if let Err(e) = settings.save(&store.dir) {
+            lock(&shared(&app)).push_log(format!("[bridge] could not save settings: {e}"));
+        }
+    }
+    lock(&shared(&app)).request_view(start_view(Some(&kind)));
+}
+
+/// «Перезапустить Bridge» when its port was taken.
+#[tauri::command]
+pub fn restart_bridge(app: AppHandle) {
+    if lock(&shared(&app)).server.is_some() {
+        return;
+    }
+    lock(&shared(&app)).push_log("[bridge] restarting (the person asked)".into());
+    app.restart();
+}
+
+pub fn tv_kind(app: &AppHandle) -> Option<String> {
+    app.try_state::<SettingsStore>().and_then(|store| {
+        store
+            .settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .tv_kind
+            .clone()
+    })
 }
 
 #[cfg(test)]
@@ -234,15 +386,26 @@ mod tests {
     #[test]
     fn strings_go_once_not_with_every_poll() {
         let s = AppState::new("T".into(), Lang::Ru);
-        let polled = serde_json::to_value(state_view(&s)).unwrap();
+        let polled = serde_json::to_value(state_view(&s, None, None)).unwrap();
         assert!(
             polled.get("strings").is_none(),
             "the 700 ms poll carries no strings"
         );
         assert_eq!(polled["adb"]["kind"], "needsConsent");
-        let once = serde_json::to_value(ui_strings(&s)).unwrap();
+        assert!(polled["tvKind"].is_null());
+        assert_eq!(polled["running"], false);
+        assert_eq!(polled["view"], "code");
+        let polled = serde_json::to_value(state_view(&s, Some("samsung".into()), None)).unwrap();
+        assert_eq!(polled["tvKind"], "samsung");
+        // The poll carries the language, so a change in the tray reaches an open window.
+        assert_eq!(polled["lang"], "ru");
+        let once = serde_json::to_value(ui_strings(&s, "ru")).unwrap();
         assert_eq!(once["lang"], "ru");
+        assert_eq!(once["langChoice"], "ru");
         assert_eq!(once["strings"]["title"], "ReTV Bridge работает");
         assert_eq!(once["windows"], cfg!(windows));
+        assert_eq!(tray::lang_choice(None), "system");
+        assert_eq!(tray::lang_choice(Some("uk")), "uk");
+        assert_eq!(tray::lang_choice(Some("de")), "system");
     }
 }

@@ -10,7 +10,7 @@ The browser cannot speak the adb protocol. The Bridge runs on your computer, lis
 
 ## What it talks to
 
-Only the addresses listed in [PRIVACY.md](PRIVACY.md): Google (platform-tools, once), retv.app (update check) and TVs on your local network. No analytics, no accounts.
+Only the addresses listed in [PRIVACY.md](PRIVACY.md): Google (platform-tools, once), retv.app (update check, and «Sign in to ReTV» if you use it) and TVs on your local network. No analytics; no account needed.
 
 ## What the Bridge trusts
 
@@ -20,6 +20,44 @@ The Bridge relays commands to `adb shell`; it is not a sandbox. Know what it doe
 - **`Origin` checks only stop other websites in the browser.** Any program on your computer can forge the `Origin` header. Against local processes only the token helps, and a process that can read your terminal window or browser memory can read the token too.
 - **Files.** `writeFile` writes only inside `/sdcard/ReTV/`, and `run` cannot write anywhere else: the allow-list has no redirection and no file-writing command outside that folder.
 - **Run the Bridge only while you use ReTV and quit it afterwards.** While it is not running, the site cannot do anything to your devices.
+
+## Samsung TVs (the «Samsung» tab)
+
+Samsung TVs do not speak adb. The tray app's «Samsung» tab sets one up directly from the computer, step by step:
+
+1. **Find the TV** (SSDP, then the TV's REST API on port 8001): model, year and whether Developer Mode is on.
+2. **Developer Mode**: the tab shows what to press on the TV (Apps, then 1 2 3 4 5) and the computer's address to type
+   as Host PC IP; then the TV restarts. Bridge talks to it with its own sdb client (port 26101), which runs only
+   Samsung's `0 …` commands.
+3. **Samsung certificate**: Samsung runs apps from outside its store only when they are signed for that TV. You sign
+   in on Samsung's own page in your browser; Bridge makes two key pairs, asks Samsung's certificate service for an
+   author and a distributor certificate (tied to the TV's DUID) and keeps them in its data folder.
+4. **ReTV Home for Samsung**: bundled into Bridge at build time from `apps/retv-tizen` (release files only; build its
+   service first with `node apps/retv-tizen/service/build.js`, or point `RETV_TIZEN_DIR` at the app). Bridge signs
+   it, pushes it, installs it with `vd_appinstall` and starts it. A build without the app says so in the tab.
+5. **Unused apps**: the TV's own list with use counts. Apps never opened are pre-ticked; Netflix, YouTube and Gallery
+   are listed but never pre-ticked; ReTV Home and TizenBrew are never offered. Removal asks first and saves the list «как было» before the first one.
+6. **Tracking and ads**: Bridge leaves a request for the TV on the ReTV account and starts ReTV Home over sdb; ReTV
+   Home takes the request, reads the ad setting and, when ads are on, opens Samsung's Privacy Choices (Bridge cannot
+   open a system app). Bridge presses the keys there over the TV's remote-control channel (the TV asks once: Allow),
+   then asks ReTV Home to read the setting again. ReTV Home reports what it read to the account, where Bridge reads
+   it; Bridge and the TV must be signed in to the same account. Without that, you say what the TV shows. At most two passes («agree to all» toggles every box), no keys when the setting is off or unknown, and a
+   stop on anything unexpected.
+
+The tab is a wizard: one step on screen, its number derived from what Bridge already knows about the TV, one main
+button at the bottom. While it waits for the TV (a restart, Developer Mode, a TV that went off) it reads the TV again
+every 5 seconds and moves on by itself; the sign-in can be cancelled or its page opened again; key presses show a
+countdown and can be stopped. The tray menu has «Настроить ТВ Samsung…», and on first run the window asks which TV
+you have, so a Samsung owner is never asked to download Google's tools.
+
+The window exists only while it is open: closing it destroys it (and its WebView), the state stays in the app. It uses
+the ReTV site's colours and the IBM Plex fonts (Latin and Cyrillic subsets in `ui/fonts`, SIL Open Font License 1.1,
+see `ui/fonts/OFL.txt`).
+
+The protocol pieces live in `crates/samsung` and are tested against local fakes. The certificate requests, form
+fields and CA choice follow [Apps2Samsung](https://github.com/Apps2Samsung/Apps2Samsung) (MIT, see
+`crates/samsung/NOTICE`); the package signatures follow the W3C XML Digital Signatures for Widgets as Tizen checks
+them.
 
 ## Build from source
 

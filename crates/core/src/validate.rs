@@ -209,12 +209,19 @@ pub fn is_installable_apk_url(url: &str) -> bool {
 pub struct MdnsService {
     /// The DNS-SD instance name (`adb-<serial>-<random>`).
     pub instance: String,
-    /// `_adb-tls-connect._tcp`, `_adb-tls-pairing._tcp` or `_adb._tcp`.
+    /// `_adb-tls-connect._tcp`, `_adb-tls-pairing._tcp`, `_adb._tcp`, or a Fire
+    /// TV's `_amzn-wplay._tcp` (FIRE_TV_SERVICE).
     pub service: String,
     /// Dotted IPv4 from the A record.
     pub ip: String,
     pub port: u16,
 }
+
+/// The service an Amazon Fire TV announces (its casting receiver). Fire OS
+/// does not announce adb: its port is always 5555 once «ADB debugging» is on.
+pub const FIRE_TV_SERVICE: &str = "_amzn-wplay._tcp";
+/// Fire OS's adb port.
+pub const FIRE_TV_ADB_PORT: u16 = 5555;
 
 /// Groups mDNS services by IP: one entry per TV in a home-network range, in
 /// first-seen order. A port of `groupServices` in the TypeScript bridge's `adb.ts`.
@@ -232,16 +239,25 @@ pub fn group_services(services: &[MdnsService]) -> Vec<DiscoveredTv> {
                     ip: s.ip.clone(),
                     connect_port: None,
                     pair_port: None,
+                    fire_tv: false,
                 });
                 tvs.len() - 1
             }
         };
         let tv = &mut tvs[idx];
-        if s.service.starts_with("_adb-tls-pairing.") {
+        if s.service.starts_with(FIRE_TV_SERVICE) {
+            tv.fire_tv = true;
+        } else if s.service.starts_with("_adb-tls-pairing.") {
             tv.pair_port = Some(s.port);
         } else if s.service.starts_with("_adb-tls-connect.") || s.service.starts_with("_adb.") {
             tv.connect_port.get_or_insert(s.port);
         }
+    }
+    // A Fire TV may also announce `_adb-tls-connect` at a random port that only
+    // answers «offline», and it has no pairing screen: its adb is 5555.
+    for tv in tvs.iter_mut().filter(|tv| tv.fire_tv) {
+        tv.connect_port = Some(FIRE_TV_ADB_PORT);
+        tv.pair_port = None;
     }
     tvs
 }
@@ -302,6 +318,33 @@ mod tests {
         assert_eq!(port_value(&json!(5555.0)), Some(5555));
         assert_eq!(port_value(&json!(-0.0)), None);
         assert_eq!(port_value(&json!(-5)), None);
+    }
+
+    #[test]
+    fn a_fire_tv_is_found_by_its_casting_service_and_connects_on_5555() {
+        let svc = |service: &str, port| MdnsService {
+            instance: "amzn.dmgr:0000:x:1".into(),
+            service: service.into(),
+            ip: "192.168.1.40".into(),
+            port,
+        };
+        let tvs = group_services(&[
+            svc("_amzn-wplay._tcp.local", 35585),
+            svc("_adb-tls-connect._tcp.local", 41000),
+            svc("_adb-tls-pairing._tcp.local", 42000),
+        ]);
+        assert_eq!(tvs.len(), 1);
+        assert!(tvs[0].fire_tv);
+        assert_eq!(tvs[0].connect_port, Some(FIRE_TV_ADB_PORT));
+        assert_eq!(tvs[0].pair_port, None);
+        // An Android TV stays as it was.
+        let android = group_services(&[MdnsService {
+            instance: "adb-1".into(),
+            service: "_adb._tcp.local".into(),
+            ip: "192.168.1.41".into(),
+            port: 5555,
+        }]);
+        assert!(!android[0].fire_tv);
     }
 
     #[test]

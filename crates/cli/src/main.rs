@@ -11,14 +11,14 @@ use retv_bridge_adb::server_proc::{restart_adb_server, start_adb_server, BRIDGE_
 use retv_bridge_adb::tools::{ensure_adb, host_pin, ReqwestGet, ToolsSource};
 use retv_bridge_adb::{AdbHost, BoxFuture, Discoverer, HttpsApkFetcher, RealAdb, ServerRevive};
 use retv_bridge_cli::{
-    code_block, connect_link, data_dir, new_token, open_browser, parse_args, should_print,
-    site_to_open, ArgsError, DEFAULT_SITE, USAGE,
+    code_block, connect_link, data_dir, default_site, new_token, open_browser, parse_args,
+    should_print, site_to_open, ArgsError, USAGE,
 };
 use retv_bridge_core::api::{BridgeAdb, Clock};
 use retv_bridge_core::events::BridgeEvent;
 use retv_bridge_core::pairing::OsCodeSource;
-use retv_bridge_core::protocol::{ALLOWED_ORIGINS, BRIDGE_HOST};
-use retv_bridge_core::server::{start_server, ServerConfig, StartError};
+use retv_bridge_core::protocol::{allowed_origins, BRIDGE_HOST, DEV_BUILD};
+use retv_bridge_core::server::{start_server, ServerConfig, StartError, UNPAIRED_SOCKET};
 use retv_bridge_core::validate::MdnsService;
 
 struct SystemClock;
@@ -83,7 +83,7 @@ async fn main() -> ExitCode {
         .site
         .clone()
         .or_else(|| std::env::var("RETV_SITE_URL").ok())
-        .unwrap_or_else(|| DEFAULT_SITE.to_string());
+        .unwrap_or_else(|| default_site(DEV_BUILD).to_string());
 
     // Google's adb, fetched once into the data folder and checked against its pin.
     let tools_dir = data_dir().join("platform-tools");
@@ -170,6 +170,8 @@ async fn main() -> ExitCode {
         clock: Arc::new(SystemClock),
         codes: Arc::new(OsCodeSource),
         version: env!("CARGO_PKG_VERSION").to_string(),
+        dev_origins: DEV_BUILD,
+        unpaired_timeout: UNPAIRED_SOCKET,
     })
     .await
     {
@@ -223,9 +225,9 @@ async fn main() -> ExitCode {
         env!("CARGO_PKG_VERSION"),
         server.port()
     );
-    println!("Allowed sites: {}", ALLOWED_ORIGINS.join(", "));
+    println!("Allowed sites: {}", allowed_origins(DEV_BUILD).join(", "));
     println!();
-    match site_to_open(&site) {
+    match site_to_open(&site, DEV_BUILD) {
         None => {
             eprintln!("{site} is not an allowed site: the bridge does not open it or print a link with the token.");
             println!("Open the ReTV site yourself: it asks for 6 digits, and the bridge shows them here.");

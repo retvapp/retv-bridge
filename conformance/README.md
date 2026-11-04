@@ -324,6 +324,15 @@ TV rules, which the vectors cannot show:
   completed handshake. Only then does the TV make a new keypair, and with it a new QR and code. The TV's first sealed
   frame is `{"t":"confirm","next":p'}`, where `p'` is the pubHash of the next keypair, so a QR phone can re-handshake
   after a dropped socket without scanning again.
+- **Resume secret** (audit 2026-11-01 M3). Right after its confirm to a QR phone, the TV seals
+  `{"event":"resume","secret":r}`, `r` 32 fresh random bytes per completed handshake. While a session lives, every QR
+  re-handshake waits for «Разрешить» on the TV (dispatching nothing, sending no TV confirm) unless the phone's confirm
+  proves `r` of the phone the session last completed with (or the `r` before it, whose notice may have been lost on a
+  dropped socket). A photo of the QR, being back within 30 s, or the relay's `ctl-id` are not enough. A phone sends a
+  proof only to a TV that gave it an `r`: an older Helper accepts no other key in the confirm, and an older phone
+  ignores the notice (it then always meets «Разрешить» on a re-handshake).
+- «Разрешить» takes effect only 1 s after the question appears, the focus starts on «Не совпадает», and a question
+  nobody answers is refused after 2 min.
 - In code mode the TV shows the SAS and dispatches nothing before «Разрешить».
 - **Failed code-mode attempts:**
   - An attempt counts as failed once the TV has sent its hello, unless it ends in «Разрешить». That covers a missing or
@@ -347,9 +356,12 @@ TV rules, which the vectors cannot show:
 
 - After the handshake, binary frames only: `counter (8 bytes BE) ‖ AES-256-GCM(key, nonce = dir ‖ counter, aad =
   roomId, plain)`, with the 16-byte tag at the end. `dir` is 4 bytes BE: `1` ctl→tv, `2` tv→ctl.
-- The first sealed frame each way is a confirm, with exactly these keys: `{"t":"confirm"}` from the phone, and
-  `{"t":"confirm","next":"<22-char base64url>"}` from the TV (16 bytes, canonical, no padding). A peer that fails to
-  open it, or to parse it as the other side's confirm (`e2e-bad-confirm`), closes with `e2e-failed`.
+- The first sealed frame each way is a confirm, with exactly these keys: `{"t":"confirm"}` or
+  `{"t":"confirm","proof":"<43-char base64url>"}` from the phone, and `{"t":"confirm","next":"<22-char base64url>"}`
+  from the TV (16 bytes, canonical, no padding). A peer that fails to open it, or to parse it as the other side's
+  confirm (`e2e-bad-confirm`), closes with `e2e-failed`.
+- `proof = HMAC-SHA256(r, "retv-helper-v1 resume" ‖ transcript)`, `transcript = SHA-256("retv-helper-v1 transcript" ‖
+  modeByte ‖ roomId ‖ tvPub ‖ ctlPub ‖ tvNonce ‖ ctlNonce)`: it binds the resume secret `r` to this handshake.
 - Each direction counts from 0, and a receiver accepts exactly the next counter. A replay, gap, reorder, bad tag or
   short frame is `e2e-bad-frame`, and it **latches**: every later `open` and `seal` on that session fails too. A TV
   that gets one on a live session ends the session (debugging off, as «Отключить телефон»); it does not wait for the
@@ -382,8 +394,11 @@ TV rules, which the vectors cannot show:
 - `reject[]`: `{ name, case, dir, steps: [{ frameHex, ok }] }`. The runner builds the receiving side of `dir` for that
   case (`ctlToTv`: the TV) and opens each step in order. A step must succeed when `ok` is true, and fail with
   `e2e-bad-frame` when it is false. The `latch-*` scenarios check that a session stays dead.
-- `confirm.accept[]`: `{ from, plainUtf8, nextHex }`. The confirm parser for `from` must accept `plainUtf8` and give
-  `nextHex` (`null` for the phone), and the builder must produce `plainUtf8` exactly.
+- `confirm.accept[]`: `{ from, plainUtf8, nextHex | proofHex }`. The confirm parser for `from` must accept
+  `plainUtf8` and give `nextHex` (the TV's) or `proofHex` (the phone's; absent for none), and the builder must produce
+  `plainUtf8` exactly.
+- `resume`: `{ case, resumeHex, transcriptHex, proofHex, ctlConfirmUtf8, resumeEventUtf8 }` for handshake.json's
+  `case`: both sides' sessions give `transcriptHex` and `proofHex`, and the builders give the two texts exactly.
 - `confirm.reject[]`: `{ name, from, plainHex }`. The parser for `from` must refuse those bytes (`e2e-bad-confirm`).
   The bytes are hex because one case is not valid UTF-8.
 
@@ -480,14 +495,28 @@ Not a fixture: what the TV and the phone see of the relay (`relay/server.ts`, te
 - `GET /relay/v1/room/<roomId>?role=tv|ctl` upgrades to a WebSocket. Two caps refuse before the handshake, with a
   plain HTTP answer: `429` past 8 open sockets per IP or 32 per prefix, `503` past the relay's open sockets over all clients (4000,
   `RELAY_MAX_SOCKETS`). Any other refusal upgrades, then closes with:
-  `4400` bad room id, role or message, `4404` no room (a `ctl`), `4409` busy, `4411` replaced (see the claim token
-  below), `4429` rate-limited (20 new rooms per
+  `4400` bad room id, role or message, `4404` no room (a `ctl`), `4409` busy, `4403` a `tv` without the room's tv
+  claim token (see below), `4411` replaced (see the claim token below), `4429` rate-limited (20 new rooms per
   IP, 60 per prefix per hour; a `tv` joining its existing room is not a new room), `4503` full (4000 rooms), `4408`
   idle, max life, or a TV alone past its wait, `4410` the other peer left and did not come back within 10 min (checked by the 30 s sweep, so 10 to 10.5 min;
   the room then ends), `4413` the other peer is not reading: a frame that would take its unsent queue past 4 MiB
-  closes the sender and is dropped (so a room never buffers more than 4 MiB per direction). A frame over 1 MiB + 1 KiB
-  closes `1009`. Once the relay closes a peer, it ignores that peer's later frames, and the other peer gets `peer-left`
-  at once.
+  closes the sender and is dropped, `4507` the relay is busy: a frame that would take the bytes queued over all rooms
+  past 64 MiB closes its sender and is dropped (try again later). A frame over 1 MiB + 1 KiB closes `1009`. Once the
+  relay closes a peer, it ignores that peer's later frames, and the other peer gets `peer-left` at once.
+- Backpressure: once a peer has more than 1 MiB queued and unsent, the relay stops reading the other peer's socket
+  until that queue drains to half of it, so a direction holds about 2 MiB at most and a flood waits on the sender's
+  side. A sender stopped this way answers no pings meanwhile: a receiver that does not read for a minute ends its
+  sender's socket through the heartbeat.
+- Origin: a request with an `Origin` header (a browser page) is served only for the site's origins
+  (`https://retv.app`, `https://ru.retv.app`, `https://beta.retv.app`, or `RELAY_ALLOWED_ORIGINS` in their place;
+  `http://localhost:<port>` and `http://127.0.0.1:<port>` too outside `NODE_ENV=production`). Any other is refused
+  `403` before the upgrade, and on `GET /relay/v1/code/<code>`. A request without `Origin` (the Helper) passes.
+- A `tv` may offer the WebSocket subprotocol `retv.tv.<token>` (16 random bytes, base64url, fresh for each room it
+  makes), which the relay selects. The room keeps the token it was made with; a later `tv` in that room (the Helper
+  rejoining) must offer the same one, or it is closed `4403`, so someone who learned the room id (a photo of the QR)
+  cannot take the TV's slot while it reconnects. A room made without a token (an older Helper) keeps the old rule,
+  and a `tv` offering a token is closed `4403` there. An older relay selects no subprotocol for a `tv`: OkHttp (the
+  Helper) does not check the answer and connects as before, without the protection.
 - A `ctl` may offer the WebSocket subprotocol `retv.ctl.<token>` (16 random bytes, base64url), which the relay selects.
   The browser keeps the token with its link. A `ctl` whose token equals the token of the `ctl` holding the slot takes
   the slot over: the older socket closes `4411`, the `tv` gets `peer-left` then `peer-joined`. Another token, no token,
@@ -498,11 +527,9 @@ Not a fixture: what the TV and the phone see of the relay (`relay/server.ts`, te
   so its slot frees within about a minute and a phone can rejoin.
 - Just before the `tv` gets `peer-joined` (or, on a take-over, the second `peer-joined`), it gets
   `{"relay":"ctl-id","id":"<16 bytes base64url>"}` when the `ctl` offered a claim token. The id is the first 16 bytes of
-  SHA-256(`retv.ctl-id:` ‖ token). The Helper keeps the id of the phone its live session last completed with: that
-  phone (the same browser tab) pairs again from the away screen as before, while any other phone that pairs from the
-  away screen, QR included, waits for «Разрешить» on the TV with the check digits on both screens. An older relay sends
-  no id, so every away-screen pairing then waits for «Разрешить»; an older Helper ignores the message. The id comes
-  from the relay, so it only decides between asking and not asking a person who can already see the TV's QR.
+  SHA-256(`retv.ctl-id:` ‖ token). It is the relay's word only, so the Helper trusts it for nothing (audit 2026-11-01
+  M3): a phone coming back to a live session proves the E2E resume secret instead (section e2e). Helper 1.0.1 used it
+  to skip «Разрешить» for the session's own tab.
 - When a peer joins and the other is there, both get `{"relay":"peer-joined"}`. When a peer leaves, the other gets
   `{"relay":"peer-left"}`; the slot stays open for 10 min (a phone locked mid-setup comes back to the same room).
 - Binary frames, and text frames that start with `{"e2e"`, go to the other peer exactly as sent (dropped while it is

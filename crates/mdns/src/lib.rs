@@ -1,8 +1,11 @@
-//! mDNS discovery of adb TVs. Queries from ephemeral ports (never 5353) with
+//! mDNS discovery of adb TVs, and of Amazon Fire TVs by their casting service
+//! (`_amzn-wplay._tcp`: Fire OS announces no adb). Queries from ephemeral ports (never 5353) with
 //! the unicast-response bit set, one socket per IPv4 interface. The pairing
 //! service, which Android 14 answers only by multicast, comes from the OS's
-//! own mDNS resolver where there is one (`os_resolver`).
+//! own mDNS resolver where there is one (`os_resolver`). Fire TVs also come
+//! from an SSDP/DIAL search (`dial`), the path on Windows and Linux.
 
+mod dial;
 #[cfg(target_os = "macos")]
 mod dnssd;
 mod os_resolver;
@@ -17,13 +20,18 @@ use std::time::Duration;
 use tokio::task::JoinSet;
 use tokio::time::Instant;
 
+pub use dial::{
+    fire_tv_name, is_amazon, is_fire_tv_app, m_search as dial_m_search, parse_device_description,
+    parse_http_answer, parse_http_url, parse_ssdp_answer, DeviceInfo, DialFinder, HttpUrl, NoDial,
+    SystemDial, DIAL_TARGET, FIRE_TV_DIAL_APP,
+};
 pub use os_resolver::{
     ipv4_from_sockaddr_bytes, os_services, service_type, NoResolver, OsAnswer, OsResolver,
     SystemResolver,
 };
 pub use parse::{
     group_services, parse_response, MdnsService, ServiceKind, SERVICE_ADB, SERVICE_CONNECT,
-    SERVICE_PAIRING,
+    SERVICE_FIRE_TV, SERVICE_PAIRING,
 };
 pub use query::{build_query, QuerySocket, SocketFactory, SystemSockets, UdpQuerySocket};
 
@@ -101,26 +109,65 @@ pub async fn discover(
     timeout: Duration,
     ifaces: &dyn Interfaces,
 ) -> Result<Vec<MdnsService>, DiscoverError> {
-    discover_merged(timeout, ifaces, &SystemSockets, &SystemResolver).await
+    discover_all(
+        timeout,
+        ifaces,
+        &SystemSockets,
+        &SystemResolver,
+        &SystemDial::default(),
+    )
+    .await
 }
 
-/// The querier (every adb service) and the OS resolver (the pairing
-/// service) at once, for `timeout` each. The querier's services come first,
-/// then the resolver's new ones, so [`group_services`] keeps its rules (a
-/// TV is named by its first service). A resolver failure only loses its
-/// part; a querier failure stands only when the resolver found nothing.
+/// [`discover_all`] without the DIAL search.
 pub async fn discover_merged(
     timeout: Duration,
     ifaces: &dyn Interfaces,
     factory: &dyn SocketFactory,
     resolver: &dyn OsResolver,
 ) -> Result<Vec<MdnsService>, DiscoverError> {
-    let (queried, resolved) = tokio::join!(
+    discover_all(timeout, ifaces, factory, resolver, &NoDial).await
+}
+
+/// The querier (every adb service) and the OS resolver (the pairing
+/// service, and Fire TV's `_amzn-wplay._tcp`, which a Fire TV does not
+/// answer to the querier's unicast question) at once, for `timeout` each. The querier's services come first,
+/// then the resolver's new ones, so [`group_services`] keeps its rules (a
+/// TV is named by its first service). A resolver failure only loses its
+/// part; a querier failure stands only when the resolver found nothing.
+///
+/// The DIAL search (`dial`, every OS: the only Fire TV path on Windows and
+/// Linux) runs alongside; its Fire TVs come last, after the resolver's.
+pub async fn discover_all(
+    timeout: Duration,
+    ifaces: &dyn Interfaces,
+    factory: &dyn SocketFactory,
+    resolver: &dyn OsResolver,
+    dial: &dyn DialFinder,
+) -> Result<Vec<MdnsService>, DiscoverError> {
+    let addrs = ifaces.ipv4();
+    let (queried, pairing, fire_tv, by_dial) = tokio::join!(
         discover_with(timeout, ifaces, factory),
-        resolver.browse(ServiceKind::Pairing, timeout)
+        resolver.browse(ServiceKind::Pairing, timeout),
+        resolver.browse(ServiceKind::FireTv, timeout),
+        dial.find(&addrs, timeout)
     );
-    let mut extra = resolved.map(|a| os_services(&a)).unwrap_or_default();
+    // Each browse keeps only its own kind of service.
+    let of_kind = |r: std::io::Result<Vec<OsAnswer>>, kind: ServiceKind| {
+        r.map(|a| os_services(&a))
+            .unwrap_or_default()
+            .into_iter()
+            .filter(move |s| s.kind == kind)
+    };
+    let mut extra: Vec<MdnsService> = of_kind(pairing, ServiceKind::Pairing)
+        .chain(of_kind(fire_tv, ServiceKind::FireTv))
+        .collect();
     extra.sort();
+    extra.extend(
+        by_dial
+            .into_iter()
+            .filter(|s| s.kind == ServiceKind::FireTv),
+    );
     let mut found = match queried {
         Ok(found) => found,
         Err(e) if extra.is_empty() => return Err(e),

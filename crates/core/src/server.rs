@@ -5,9 +5,13 @@
 //! - Binds the loopback interface only. A plain HTTP request gets 426, an
 //!   upgrade with another method than GET 400, a request head over 16 KiB 431.
 //! - The upgrade is refused with 403 unless `Origin` is exactly one of
-//!   `ALLOWED_ORIGINS` and `Host` is `127.0.0.1:<port>` or `localhost:<port>`
+//!   `ALLOWED_ORIGINS` (plus `DEV_ORIGINS` with `ServerConfig::dev_origins`,
+//!   debug builds only) and `Host` is `127.0.0.1:<port>` or `localhost:<port>`
 //!   for the bound port (DNS-rebinding guard). Refusals never touch pairing.
-//!   At most `MAX_SOCKETS` sockets are open at once; one more gets 503.
+//!   At most `MAX_SOCKETS` sockets are open at once, and at most
+//!   `MAX_UNPAIRED_SOCKETS` of them without having sent the session token;
+//!   one more gets 503. A socket that sends no token within
+//!   `ServerConfig::unpaired_timeout` is closed (1008).
 //! - Messages are capped at `MAX_MESSAGE_BYTES`; a bigger one closes the
 //!   socket with 1009.
 //! - One `Pairing` per server, shared by every socket. The pairing lock is
@@ -35,7 +39,10 @@ use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use crate::api::{ApkFetcher, BridgeAdb, Clock, CodeSource};
 use crate::events::BridgeEvent;
 use crate::pairing::{OsCodeSource, PairFinish, PairStart, Pairing};
-use crate::protocol::{ALLOWED_HOSTS, ALLOWED_ORIGINS, BRIDGE_HOST, MAX_MESSAGE_BYTES};
+use crate::protocol::{
+    origin_allowed, ALLOWED_HOSTS, BRIDGE_HOST, MAX_MESSAGE_BYTES, MAX_UNPAIRED_SOCKETS,
+    UNPAIRED_SOCKET_MS,
+};
 use crate::session::{digest_matches, run_session, token_digest, SessionState};
 
 /// The HTTP request head must arrive within this long, and fit in `MAX_HEAD`.
@@ -46,6 +53,8 @@ const SHUTDOWN_WAIT: Duration = Duration::from_secs(15);
 const EVENT_CAPACITY: usize = 1024;
 /// Sockets open at once; one more is refused with 503 before the upgrade.
 pub const MAX_SOCKETS: usize = 16;
+/// The default `ServerConfig::unpaired_timeout`.
+pub const UNPAIRED_SOCKET: Duration = Duration::from_millis(UNPAIRED_SOCKET_MS);
 
 pub struct ServerConfig {
     /// The session token (never logged).
@@ -58,6 +67,12 @@ pub struct ServerConfig {
     pub codes: Arc<dyn CodeSource>,
     /// `hello`'s `version`.
     pub version: String,
+    /// Also take the local dev site's Origin (`DEV_ORIGINS`). The app and the
+    /// CLI pass `protocol::DEV_BUILD`: debug builds only.
+    pub dev_origins: bool,
+    /// A socket that has not sent the session token this long after it opened
+    /// is closed (`UNPAIRED_SOCKET`; shorter in tests).
+    pub unpaired_timeout: Duration,
 }
 
 #[derive(Debug)]
@@ -137,6 +152,10 @@ pub(crate) struct Shared {
     next_session: AtomicU64,
     /// Sockets open or being opened (at most `MAX_SOCKETS`).
     open_sockets: AtomicUsize,
+    /// Of those, the ones that have not sent the token (at most `MAX_UNPAIRED_SOCKETS`).
+    unpaired_sockets: AtomicUsize,
+    dev_origins: bool,
+    pub unpaired_timeout: Duration,
 }
 
 impl Shared {
@@ -300,6 +319,9 @@ pub async fn start_server(cfg: ServerConfig) -> Result<BridgeServer, StartError>
         sessions_changed: Notify::new(),
         next_session: AtomicU64::new(1),
         open_sockets: AtomicUsize::new(0),
+        unpaired_sockets: AtomicUsize::new(0),
+        dev_origins: cfg.dev_origins,
+        unpaired_timeout: cfg.unpaired_timeout,
     });
     let (shutdown, shutdown_rx) = watch::channel(false);
     let accept = tokio::spawn(accept_loop(listener, shared.clone(), shutdown_rx));
@@ -434,6 +456,28 @@ impl Drop for SocketSlot {
     }
 }
 
+/// One of the `MAX_UNPAIRED_SOCKETS` places for a socket that has not sent the
+/// session token yet; the session drops it once the token comes, or on close.
+pub(crate) struct UnpairedSlot(Arc<Shared>);
+
+impl UnpairedSlot {
+    fn take(shared: &Arc<Shared>) -> Option<UnpairedSlot> {
+        shared
+            .unpaired_sockets
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |n| {
+                (n < MAX_UNPAIRED_SOCKETS).then_some(n + 1)
+            })
+            .ok()
+            .map(|_| UnpairedSlot(shared.clone()))
+    }
+}
+
+impl Drop for UnpairedSlot {
+    fn drop(&mut self) {
+        self.0.unpaired_sockets.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
 async fn serve_connection(
     mut tcp: TcpStream,
     shared: Arc<Shared>,
@@ -464,13 +508,13 @@ async fn serve_connection(
     }
 
     let mut origin: Option<String> = None;
-    let mut slot: Option<SocketSlot> = None;
+    let mut slot: Option<(SocketSlot, UnpairedSlot)> = None;
     // The error type is tungstenite's own.
     #[allow(clippy::result_large_err)]
     let check = |req: &Request, resp: Response| -> Result<Response, ErrorResponse> {
         let o = single_header(req, "origin");
         let h = single_header(req, "host");
-        let ok = o.is_some_and(|o| ALLOWED_ORIGINS.contains(&o))
+        let ok = o.is_some_and(|o| origin_allowed(o, shared.dev_origins))
             && h.is_some_and(|h| shared.host_allowed(h));
         let refuse = |status: StatusCode| {
             let mut r = ErrorResponse::new(None);
@@ -492,7 +536,13 @@ async fn serve_connection(
             ));
             return refuse(StatusCode::SERVICE_UNAVAILABLE);
         };
-        slot = Some(s);
+        let Some(u) = UnpairedSlot::take(&shared) else {
+            shared.log(format!(
+                "[bridge] rejected connection: {MAX_UNPAIRED_SOCKETS} sockets without the token already open"
+            ));
+            return refuse(StatusCode::SERVICE_UNAVAILABLE);
+        };
+        slot = Some((s, u));
         origin = o.map(str::to_string);
         Ok(resp)
     };
@@ -508,10 +558,10 @@ async fn serve_connection(
     else {
         return;
     };
-    let (Some(origin), Some(_slot)) = (origin, slot) else {
+    let (Some(origin), Some((_slot, unpaired))) = (origin, slot) else {
         return;
     };
-    run_session(ws, origin, shared, shutdown).await;
+    run_session(ws, origin, shared, shutdown, unpaired).await;
 }
 
 /// The TCP stream with the already-read request head put back in front.

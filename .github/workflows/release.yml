@@ -533,19 +533,18 @@ jobs:
             local $/; open(my $h, "<", $ARGV[0]) or die; my $n = JSON::PP->new->utf8->decode(<$h>);
             binmode STDOUT, ":utf8";
             if ($ARGV[4] eq "true") {
-              print "> [!NOTE]\n> Mac only: this release has no Windows build (BRIDGE_MAC_ONLY). ";
-              print "Stage it with scripts/release-retv-bridge.sh --mac-only; the site says the Windows version is coming.\n\n";
+              # The body is published as is: only text for the people who download the app.
+              print "> [!NOTE]\n> This release is for Mac only. The Windows version is coming.\n\n";
             } elsif ($ARGV[2] ne "true") {
               print "> [!WARNING]\n> The Windows installer in this draft is NOT code-signed (SignPath not set up yet). ";
               print "The Windows half is internal beta only and is never staged on retv.app; ";
               print "the Mac half may be staged with scripts/release-retv-bridge.sh --mac-only. Do not publish this draft.\n\n";
             }
             if ($ARGV[3] eq "unsigned") {
-              print "> [!NOTE]\n> The macOS build is ad-hoc signed and NOT notarized by Apple (no Apple Developer ID). ";
-              print "macOS asks once before the first start: on macOS 15 and newer System Settings \x{2192} Privacy & Security \x{2192} Open Anyway, ";
+              print "> [!NOTE]\n> The macOS build is ad-hoc signed and not notarized by Apple. ";
+              print "macOS asks once before the first start: on macOS 15 and newer use System Settings \x{2192} Privacy & Security \x{2192} Open Anyway, ";
               print "on older macOS Control-click the app \x{2192} Open. Updates are verified with the updater signature as usual.\n\n";
             }
-            print "Draft for ReTV Bridge $ARGV[1]. Check the assets before they are staged on retv.app.\n\n";
             for my $lang (qw(en ru)) { print "### $lang\n\n"; print "- $_\n" for @{$n->{$lang}}; print "\n" }
           ' "release-notes/$VERSION.json" "$VERSION" "$SIGNED" "$MAC_ROUTE" "$MAC_ONLY" > "$RUNNER_TEMP/body.md"
 

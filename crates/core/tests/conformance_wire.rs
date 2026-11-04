@@ -14,7 +14,9 @@ use futures_util::{SinkExt, StreamExt};
 use retv_bridge_core::api::{Clock, CodeSource};
 use retv_bridge_core::events::BridgeEvent;
 use retv_bridge_core::pairing::OsCodeSource;
-use retv_bridge_core::server::{start_server, BridgeServer, ServerConfig, StartError};
+use retv_bridge_core::server::{
+    start_server, BridgeServer, ServerConfig, StartError, UNPAIRED_SOCKET,
+};
 use serde_json::{Map, Value};
 use support::fake_adb::{hex_bytes, AdbLog, FakeAdb, FakeFetcher};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -329,6 +331,8 @@ async fn run_fixture(file: &str, model_via_getprop: bool) {
         clock: clock.clone(),
         codes: Arc::new(QueueCodes(Mutex::new(codes))),
         version: "test".into(),
+        dev_origins: true,
+        unpaired_timeout: UNPAIRED_SOCKET,
     })
     .await
     .unwrap_or_else(|e| panic!("{file}: start failed: {e}"));
@@ -486,6 +490,8 @@ async fn start_server_reports_port_in_use() {
         clock: Arc::new(FakeClock(AtomicU64::new(T0))),
         codes: Arc::new(QueueCodes(Mutex::new(VecDeque::new()))),
         version: "test".into(),
+        dev_origins: true,
+        unpaired_timeout: UNPAIRED_SOCKET,
     })
     .await;
     assert!(matches!(r, Err(StartError::PortInUse)), "{:?}", r.err());

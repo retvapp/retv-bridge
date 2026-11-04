@@ -9,6 +9,7 @@
 //! - macOS: dns_sd in libSystem (`DNSServiceBrowse` → `DNSServiceResolve` →
 //!   `DNSServiceGetAddrInfo`), see `dnssd`.
 //! - Windows and Linux: none yet; the site asks for the port the TV shows.
+//!   Fire TVs are still found there by SSDP/DIAL (`dial`).
 
 use std::io;
 use std::net::{IpAddr, Ipv4Addr};
@@ -76,9 +77,7 @@ pub fn service_type(kind: ServiceKind) -> &'static str {
 fn kind_of(reported: &str) -> Option<ServiceKind> {
     let t = reported.trim_end_matches('.').to_ascii_lowercase();
     let t = t.strip_suffix(".local").unwrap_or(&t);
-    [ServiceKind::Connect, ServiceKind::Pairing, ServiceKind::Adb]
-        .into_iter()
-        .find(|k| service_type(*k) == t)
+    ServiceKind::ALL.into_iter().find(|k| service_type(*k) == t)
 }
 
 /// The OS answers as services: one per IPv4 address, in order, without

@@ -1,0 +1,13 @@
+HTTP/1.1 200 OK
+Content-Type: text/xml; charset=utf-8
+Access-Control-Allow-Origin: (null)
+
+<?xml version="1.0" encoding="UTF-8"?>
+<service xmlns="urn:dial-multiscreen-org:schemas:dial" dialVer="2.2.1">
+  <name>FireTVRemote</name>
+  <options allowStop="true"/>
+  <state>stopped</state>
+  <additionalData>
+
+  </additionalData>
+</service>

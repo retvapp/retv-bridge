@@ -26,6 +26,24 @@ impl Lang {
         }
     }
 
+    /// The first of the system's preferred languages that Bridge speaks
+    /// (ru, uk, en), in the person's order; English when none is.
+    /// `["de-DE", "ru-RU"]` → Ru: a German-first Mac with Russian second
+    /// reads Russian, not English.
+    pub fn from_locales<I, S>(locales: I) -> Lang
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        for l in locales {
+            let l = l.as_ref().to_ascii_lowercase();
+            if l.starts_with("ru") || l.starts_with("uk") || l.starts_with("en") {
+                return Lang::from_locale(&l);
+            }
+        }
+        Lang::En
+    }
+
     /// The system's language. Debug builds honour `RETV_BRIDGE_LANG` (ru, en, uk)
     /// so every language can be checked on one machine.
     pub fn detect() -> Lang {
@@ -34,7 +52,7 @@ impl Lang {
                 return Lang::from_locale(&v);
             }
         }
-        Lang::from_locale(&sys_locale::get_locale().unwrap_or_default())
+        Lang::from_locales(sys_locale::get_locales())
     }
 
     pub fn code(self) -> &'static str {
@@ -43,6 +61,23 @@ impl Lang {
             Lang::En => "en",
             Lang::Uk => "uk",
         }
+    }
+}
+
+/// The language menu: «Как в системе», then each language by its own name.
+pub const LANG_CHOICES: [&str; 4] = ["system", "ru", "uk", "en"];
+
+pub fn valid_choice(code: &str) -> bool {
+    LANG_CHOICES.contains(&code)
+}
+
+/// The language the person picked in Bridge (`ru`, `uk`, `en`), else the system's.
+pub fn pick(saved: Option<&str>, system: Lang) -> Lang {
+    match saved {
+        Some("ru") => Lang::Ru,
+        Some("uk") => Lang::Uk,
+        Some("en") => Lang::En,
+        _ => system,
     }
 }
 
@@ -96,6 +131,76 @@ mod tests {
     }
 
     #[test]
+    fn lang_from_the_preferred_list() {
+        assert_eq!(Lang::from_locales(["ru-RU", "en-US"]), Lang::Ru);
+        assert_eq!(Lang::from_locales(["de-DE", "ru-RU"]), Lang::Ru);
+        assert_eq!(Lang::from_locales(["pl-PL", "uk-UA", "ru-RU"]), Lang::Uk);
+        assert_eq!(Lang::from_locales(["en-RU", "ru-RU"]), Lang::En);
+        assert_eq!(Lang::from_locales(["de-DE"]), Lang::En);
+        assert_eq!(Lang::from_locales(Vec::<String>::new()), Lang::En);
+    }
+
+    #[test]
+    fn a_language_the_person_picked_wins_over_the_system() {
+        // The owner's Mac: preferred languages [en, ru], so the system pick is English.
+        let system = Lang::from_locales(["en", "ru"]);
+        assert_eq!(system, Lang::En);
+        assert_eq!(pick(Some("ru"), system), Lang::Ru);
+        assert_eq!(pick(Some("uk"), system), Lang::Uk);
+        assert_eq!(pick(Some("system"), system), Lang::En);
+        assert_eq!(pick(None, Lang::Ru), Lang::Ru);
+        assert_eq!(
+            pick(Some("de"), Lang::Ru),
+            Lang::Ru,
+            "an unknown code is the system"
+        );
+        for c in LANG_CHOICES {
+            assert!(valid_choice(c));
+            assert_ne!(t(Lang::En, &format!("lang.{c}")), format!("lang.{c}"));
+        }
+        assert!(!valid_choice("de"));
+    }
+
+    #[test]
+    fn plural_strings_have_every_form() {
+        // The window picks `.one/.few/.many/.other` with Intl.PluralRules (ru and uk use all four).
+        for lang in [Lang::Ru, Lang::En, Lang::Uk] {
+            let table = strings(lang);
+            for k in table.keys().filter(|k| k.ends_with(".one")) {
+                let base = &k[..k.len() - ".one".len()];
+                for form in ["few", "many", "other"] {
+                    let key = format!("{base}.{form}");
+                    assert!(table.contains_key(&key), "{lang:?} misses {key}");
+                }
+            }
+        }
+        assert_eq!(t(Lang::Ru, "samsung.apps.uses.few"), "{n} раза");
+        assert_eq!(t(Lang::Uk, "samsung.apps.uses.many"), "{n} разів");
+    }
+
+    #[test]
+    fn world_strings_never_name_russia() {
+        for lang in [Lang::En, Lang::Uk] {
+            for (k, v) in strings(lang) {
+                let low = v.to_lowercase();
+                for word in ["russia", "росі", "россі"] {
+                    assert!(!low.contains(word), "{lang:?}: {k} mentions Russia: {v}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn no_window_string_has_a_check_mark() {
+        // Done states get an icon in the window; strings stay plain.
+        for lang in [Lang::Ru, Lang::En, Lang::Uk] {
+            for (k, v) in strings(lang) {
+                assert!(!v.contains('✓'), "{lang:?}: {k} has a check mark");
+            }
+        }
+    }
+
+    #[test]
     fn i18n_keys_match_across_ru_en_uk() {
         let en: Vec<&String> = strings(Lang::En).keys().collect();
         assert!(en.len() > 20);
@@ -124,6 +229,18 @@ mod tests {
             "Код для сайта: 482 917"
         );
         assert_eq!(t(Lang::Uk, "nope.missing"), "nope.missing");
+    }
+
+    #[test]
+    fn samsung_strings_do_not_name_the_mac() {
+        // The Samsung tab ships on Windows too.
+        for lang in [Lang::Ru, Lang::En, Lang::Uk] {
+            for (k, v) in strings(lang) {
+                if k.starts_with("samsung.") {
+                    assert!(!v.contains("Mac"), "{lang:?}: {k} names the Mac: {v}");
+                }
+            }
+        }
     }
 
     #[test]

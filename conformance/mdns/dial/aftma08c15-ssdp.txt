@@ -1,0 +1,9 @@
+HTTP/1.1 200 OK
+LOCATION: http://192.168.88.218:60000/dd.xml
+CACHE-CONTROL: max-age=1800
+EXT:
+BOOTID.UPNP.ORG: 1
+SERVER: Linux/2.6 UPnP/1.1 quick_ssdp/1.1
+ST: urn:dial-multiscreen-org:service:dial:1
+USN: uuid:49cf6b57-1fd0-3e45-b78b-844cae72ba97::urn:dial-multiscreen-org:service:dial:1
+

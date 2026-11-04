@@ -207,7 +207,10 @@ async fn the_os_pairing_port_joins_the_querier_tv() {
     .unwrap();
     assert_eq!(
         *resolver.asked.lock().unwrap(),
-        vec![(ServiceKind::Pairing, timeout)]
+        vec![
+            (ServiceKind::Pairing, timeout),
+            (ServiceKind::FireTv, timeout)
+        ]
     );
     // The querier's services come first, so the TV keeps its `_adb` name.
     assert_eq!(found[0].kind, ServiceKind::Adb);
@@ -286,4 +289,41 @@ async fn os_results_without_interfaces() {
     .await
     .unwrap();
     assert_eq!(found.len(), 1);
+}
+
+#[tokio::test]
+async fn a_fire_tv_comes_from_the_os_resolver_and_connects_on_5555() {
+    // A Fire TV announces `_amzn-wplay._tcp` (its casting receiver), never adb,
+    // and does not answer the querier's unicast question.
+    let fire = Ipv4Addr::new(192, 168, 1, 218);
+    let resolver = FakeResolver {
+        answers: vec![OsAnswer {
+            instance: "amzn.dmgr:0000000000000000:aaaa:1".into(),
+            service_type: "_amzn-wplay._tcp.".into(),
+            port: 35585,
+            addrs: vec![IpAddr::V4(fire)],
+        }],
+        ..Default::default()
+    };
+    let sockets = Sockets {
+        answer: None,
+        send_err: None,
+    };
+    let found = discover_merged(
+        Duration::from_millis(100),
+        &Fixed(vec![Ipv4Addr::new(192, 168, 1, 10)]),
+        &sockets,
+        &resolver,
+    )
+    .await
+    .unwrap();
+    // The fake answers every browse alike; only the Fire TV browse keeps it.
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].kind, ServiceKind::FireTv);
+    let tvs = group_services(&found);
+    assert_eq!(tvs.len(), 1);
+    assert!(tvs[0].fire_tv);
+    assert_eq!(tvs[0].ip, "192.168.1.218");
+    assert_eq!(tvs[0].connect_port, Some(5555));
+    assert_eq!(tvs[0].pair_port, None);
 }

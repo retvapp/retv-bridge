@@ -28,9 +28,10 @@ must pass them.
 
 The WebSocket upgrade is refused with **403** before any message unless both hold:
 
-- `Origin` is exactly one of:
-  `http://127.0.0.1:5180`, `http://localhost:5180` (site dev server), `http://127.0.0.1:4189` (site tests),
-  `https://retv.app`, `https://ru.retv.app`.
+- `Origin` is exactly one of `https://retv.app`, `https://ru.retv.app`. A development bridge (Rust: a debug
+  build; TS: started with `--dev`) also takes `http://127.0.0.1:5180`, `http://localhost:5180` (site dev server)
+  and `http://127.0.0.1:4189` (site tests); a release bridge refuses them. The wire fixtures assume a
+  development bridge.
   The match is exact and case-sensitive: a missing `Origin`, `null`, another scheme, port, host, letter case
   or a trailing `/` are all refused.
 - `Host` is exactly `127.0.0.1:<port>` or `localhost:<port>` (case-sensitive) for the port the bridge listens
@@ -40,6 +41,12 @@ Refused connections never touch pairing state.
 
 The bridge holds at most **16** sockets at once. Past the checks above, one more upgrade is refused with **503**
 (Service Unavailable) until a socket closes.
+
+A socket is *unpaired* until one of its messages carries the session token (`hello` with the token counts;
+`pairStart` / `pairFinish` do not). At most **4** unpaired sockets may be open at once: one more upgrade is
+refused with **503** until one of them sends the token or closes. An unpaired socket is closed with **1008**
+(reason `no token`) **60 s** after it opened. Pairing state is the bridge's, not the socket's, so a site that
+was waiting for the person to type the code just opens a new socket for `pairFinish`.
 
 ## Messages
 
@@ -162,6 +169,15 @@ resolver (mDNSResponder, through dns_sd) for it. On Windows and Linux there is n
 Android 14+ TVs `pairPort` stays `null` there, and the site asks for the port the TV shows. TVs that answer the
 query directly still report `pairPort` on every OS.
 
+An Amazon Fire TV announces no adb service, only its casting receiver `_amzn-wplay._tcp` (it does not answer the
+querier, so on macOS it comes from the system resolver). On every OS the bridge also sends an SSDP M-SEARCH for
+DIAL (`urn:dial-multiscreen-org:service:dial:1`) from an ephemeral port and reads each answer's device description
+on the answering address only: `manufacturer` Amazon (or a `FireTVRemote` DIAL app at its `Application-URL`, for
+Fire TV Edition TVs) makes it a Fire TV, named by its `friendlyName`. This is the Fire TV path on Windows and Linux. Its entry carries `"fireTv": true` (the key is
+left out for every other TV), `connectPort: 5555` (Fire OS's adb port once «ADB debugging» is on, whatever
+`_adb-tls-connect` port the TV may also announce) and `pairPort: null` (Fire OS has no pairing screen). The Bridge
+window shows «Fire TV found: turn on ADB debugging» with the steps while no adb connection to that IP exists.
+
 ### pair
 
 adb pairing with the TV (the 6 digits on the TV's Wireless debugging screen), not site pairing. `ip` must be a
@@ -279,6 +295,7 @@ Clients must treat an error code they do not know as `internal`.
 | Pairing lock | 30 s, doubling, at most 1 h |
 | Codes per run | 20 |
 | Sockets open at once | 16 (then `503`) |
+| Sockets open without the token | 4 (then `503`); each closes (1008) 60 s after it opened |
 | Requests running per socket | 32 (then `too-many-requests`) |
 | Request head | 16 KiB (then `431`) |
 
@@ -428,8 +445,9 @@ stages by ` | `. So `settings put global animator_duration_scale '1.0'` runs as
 | `<hex64>` | exactly 64 lowercase hex digits |
 | `<layout-backup>` | `/sdcard/Download/ReTV/retv-home-layout.json` or `/sdcard/Download/ReTV/retv-home-layout (1).json` … `(9).json` (quoted, it has a space) |
 | `<backup-b64>` | standard base64 (`[A-Za-z0-9+/]`, then at most two `=`), a multiple of 4, 4..96000 characters |
-| `<global-key>` | `window_animation_scale`, `transition_animation_scale`, `animator_duration_scale`, `private_dns_mode`, `private_dns_specifier`, `always_finish_activities`, `adb_enabled` |
-| `<secure-key>` | `enabled_accessibility_services`, `accessibility_enabled`, `screensaver_components`, `limit_ad_tracking` |
+| `<global-key>` | `window_animation_scale`, `transition_animation_scale`, `animator_duration_scale`, `private_dns_mode`, `private_dns_specifier`, `always_finish_activities`, `adb_enabled`, `com.amazon.tv.settings.featured_item_video_enabled`, `com.amazon.tv.settings.featured_item_video_volume` |
+| `<secure-key>` | `enabled_accessibility_services`, `accessibility_enabled`, `screensaver_components`, and every `<fire-switch>` |
+| `<fire-switch>` | the Fire OS ads and tracking switches: `limit_ad_tracking`, `amz_limit_ad_tracking`, `non_amz_limit_ad_tracking`, `advertisingIdApp:interestBasedAds:value`, `USAGE_METRICS_UPLOAD_ENABLED`, `usage_metrics_marketing_enabled`, `settingsApp:appUsageData:value`, `settingsApp:deviceUsageData:value` |
 | `<scale>` | a decimal 0..10: `^(10(\.0+)?\|[0-9](\.[0-9]+)?)$` (`0`, `0.5`, `1.0`, `10`) |
 | `<host>` | a Private DNS host name: `^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9-]+)+$`, at most 253 characters (lowercase, at least one dot, no port) |
 | `<a11y-list>` | `<component>` joined by `:`, or empty; at most 4096 characters |
@@ -450,7 +468,7 @@ The settings keys are the engine's `MANAGED_SETTINGS` (what a snapshot keeps and
 | --- |
 | `getprop` · `getprop <prop>` |
 | `cat /proc/meminfo` |
-| `dumpsys` with one of `connectivity`, `diskstats`, `meminfo`, `package`, `usagestats`, `wifi` |
+| `dumpsys` with one of `connectivity`, `diskstats`, `display`, `hdmi_control`, `meminfo`, `package`, `usagestats`, `webviewupdate`, `wifi` (`display` and `hdmi_control`: the TV a stick is plugged into) |
 | `dumpsys meminfo <pkg>` · `dumpsys package <pkg>` · `dumpsys notification` (redacted: no `--noredact`) |
 | `dumpsys package [<pkg>]`, piped to exactly the engine's microphone filter (`mic-audit.ts` `MIC_FILTER`, below) |
 | `dumpsys package <pkg>`, piped to `grep -E '^ *(Package \[\|versionCode=\|versionName=)'` |
@@ -480,6 +498,7 @@ The settings keys are the engine's `MANAGED_SETTINGS` (what a snapshot keeps and
 | `pm grant --user 0 <pkg> android.permission.RECORD_AUDIO` · the same with `revoke` |
 | `pm grant --user 0 app.retv.home android.permission.READ_LOGS` · the same with `revoke` (ReTV Home only) |
 | `pm grant --user 0 app.retv.home android.permission.READ_TV_LISTINGS` · the same with `revoke` (ReTV Home only) |
+| `pm grant --user 0 app.retv.home android.permission.WRITE_SECURE_SETTINGS` · the same with `revoke` (ReTV Home only; Fire OS: it puts its own FireHomeService back after an update) |
 | `cmd appops set [--user 0] <pkg> <op> <mode>` |
 | `cmd appops set app.retv.home REQUEST_INSTALL_PACKAGES allow\|default\|ignore\|deny` (ReTV Home installs its own updates, and restore puts back the recorded mode; that package only) |
 | `cmd package set-home-activity <component>` · `cmd package set-home-activity --user 0 <component>` |
@@ -487,16 +506,18 @@ The settings keys are the engine's `MANAGED_SETTINGS` (what a snapshot keeps and
 | `settings put global private_dns_mode off\|opportunistic\|hostname` · `settings put global private_dns_specifier <host>` |
 | `settings put global always_finish_activities\|adb_enabled 0\|1` · `settings put secure accessibility_enabled 0\|1` |
 | `settings put secure enabled_accessibility_services <a11y-list>` · `settings put secure screensaver_components <screensaver-list>` |
-| `settings put secure limit_ad_tracking 0\|1` |
+| `settings put secure <fire-switch> 0\|1` · `settings put global com.amazon.tv.settings.featured_item_video_enabled 0\|1` · `settings put global com.amazon.tv.settings.featured_item_video_volume <scale>` |
 | `settings delete global <global-key>` · `settings delete secure <secure-key>` |
 | `pm trim-caches 999G` |
 | `timeout <seconds> cmd package bg-dexopt-job` · `timeout <seconds> cmd package compile -m speed-profile -a` |
 | `am broadcast -n app.retv.home/.data.DeviceKeyReceiver -a app.retv.home.action.DEVICE_KEY -f 32 --es key <hex64>` |
+| `am broadcast -n app.retv.home/.data.TvInfoReceiver -a app.retv.home.action.TV_INFO -f 32 --es pnp <pnp> --es name <tv-text> --ei year <year> --ei sink 0\|1\|2\|3 --es cec <cec> --es osd <tv-text> --es kind stick\|tv\|-` (the TV a stick is plugged into, for ReTV Home on Android 11 and older; `-` is unknown; `<pnp>` three capital letters; `<tv-text>` 1..32 of letters, digits, space, `._+-`, no space at either end; `<year>` `0` or 1990..2099; `<cec>` six capital hex digits) |
 | `timeout 10 am broadcast --user <user> -n app.retv.home/.data.DisabledSetReceiver -a app.retv.home.action.DISABLED_SET -f 32 --ei seq <n> --ei total <n> --es pkgs <pkg-list>` (the packages ReTV turned off, for that user's ReTV Home; `<user>` `0` or another user's id; `<n>` 1..99, `<pkg-list>` packages joined by `,`, at most 1000 characters, or `-` for none) |
 | `am broadcast -n app.retv.home/.data.LayoutBackupReceiver -a app.retv.home.action.LAYOUT_BACKUP -f 32 --es backup <backup-b64>` |
 | `am broadcast -n app.retv.home/.a11y.HomeOverrideReceiver -a app.retv.home.action.HOME_OVERRIDE -f 32 --ez consent true` (or `false`) |
 | `am start -a android.intent.action.VIEW -d <market-url>` |
 | `am start -a` with one of `com.google.android.gms.settings.ADS_PRIVACY`, `android.settings.PRIVACY_SETTINGS`, `android.settings.SETTINGS` (open a settings screen; no component, no extras) |
+| `am start -a android.intent.action.MAIN -c android.intent.category.HOME` (bring the TV's home screen up when setup ends; exactly this, no component, no flags, no user) |
 
 The fixed filters, verbatim as the engine sends them (`[--user 0]` above means with or without exactly `--user 0`):
 
@@ -507,8 +528,8 @@ grep -E 'res/(mipmap|drawable)[^/]*/(ic_launcher|app_icon|icon|ic_app|launcher_i
 
 Not on the list, on purpose: `pm install` in any form (an APK reaches the TV only through `installApk`, which downloads
 from the ReTV site and checks the SHA-256 the site pins), `pm clear`, `input`, `reboot`, `sh`, `su`, `logcat`, `echo`,
-any write outside `/sdcard/ReTV/`, settings keys other than the ones above, `am start` of anything but a Play Store page or the three settings screens above,
-broadcasts to anything but ReTV Home's four receivers, and any other `dumpsys` service.
+any write outside `/sdcard/ReTV/`, settings keys other than the ones above, `am start` of anything but a Play Store page, the three settings screens or the plain HOME intent above,
+broadcasts to anything but ReTV Home's receivers above, and any other `dumpsys` service.
 
 What a token holder can still do in v3, honestly: everything the site itself does, within the checks above.
 
@@ -600,7 +621,7 @@ It speaks **protocol v3 with a profile of its own**: everything above holds, exc
 
 | type | params | result | errors |
 | --- | --- | --- | --- |
-| `hello` | none (`version` optional) | `{ version, protocol: 3, features: ["installApk", "allowlist", "helper", "siteSignIn"], adb, paired: true }` | none |
+| `hello` | none (`version` optional) | `{ version, protocol: 3, features: ["installApk", "allowlist", "helper", "siteSignIn", "showHome"], adb, paired: true }` | none |
 | `helperInfo` | none | `{ sdk, release, model, classicPort, adb: "ready" \| "none", method: "classic" \| "wireless" \| null }` | none |
 | `adbStart` | `method`: `"classic"` \| `"wireless"` | `{ method }` | `unauthorized`, `device-unreachable`, `pairing-needed`, `wireless-off`, `bad-request` |
 | `adbPair` | `code`: a string of exactly 6 digits | `{ method: "wireless" }` | `no-pairing-service`, `pairing-failed`, `wireless-off`, `bad-request` |

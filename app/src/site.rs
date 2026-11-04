@@ -1,6 +1,6 @@
 //! Which ReTV site the bridge opens, and the link that carries the token.
 
-use retv_bridge_core::protocol::ALLOWED_ORIGINS;
+use retv_bridge_core::protocol::{ALLOWED_ORIGINS, DEV_ORIGINS};
 
 /// The ReTV site for a system locale: the Russian site for `ru*`, else the
 /// international one.
@@ -19,11 +19,16 @@ pub fn connect_link(site: &str, token: &str) -> String {
 }
 
 /// A development override of the site (`RETV_SITE_URL`, debug builds only):
-/// accepted only when it is exactly an allowed origin, so the token never
+/// accepted only when it is exactly an allowed origin of a debug build
+/// (`ALLOWED_ORIGINS` or `DEV_ORIGINS`), so the token never
 /// goes anywhere else.
 pub fn dev_override(value: Option<&str>) -> Option<&'static str> {
     let v = value?.trim_end_matches('/');
-    ALLOWED_ORIGINS.iter().copied().find(|o| *o == v)
+    ALLOWED_ORIGINS
+        .iter()
+        .chain(DEV_ORIGINS)
+        .copied()
+        .find(|o| *o == v)
 }
 
 #[cfg(test)]

@@ -1,0 +1,6 @@
+HTTP/1.1 200 OK
+Content-Type: text/xml; charset=utf-8
+Application-URL: http://192.168.88.218:8009/apps/
+Access-Control-Allow-Origin: *
+
+<?xml version="1.0"?><root xmlns="urn:schemas-upnp-org:device-1-0" xmlns:r="urn:restful-tv-org:schemas:upnp-dd"> <specVersion> <major>1</major> <minor>0</minor> </specVersion> <device> <deviceType>urn:schemas-upnp-org:device:tvdevice:1</deviceType> <friendlyName>label's Fire TV Stick</friendlyName> <manufacturer>Amazon</manufacturer> <modelName>AFTMA08C15</modelName> <UDN>uuid:49cf6b57-1fd0-3e45-b78b-844cae72ba97</UDN> </device></root>

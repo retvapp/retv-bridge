@@ -11,14 +11,41 @@ pub const PROTOCOL_VERSION: u32 = 3;
 /// `siteSignIn`: the allow-list takes ReTV Home's site sign-in broadcast and never logs its one-time code.
 pub const FEATURES: &[&str] = &["installApk", "allowlist", "siteSignIn"];
 
-/// Pages allowed to talk to the bridge (exact `Origin` header match).
-pub const ALLOWED_ORIGINS: &[&str] = &[
+/// Pages allowed to talk to the bridge (exact `Origin` header match): the ReTV sites.
+pub const ALLOWED_ORIGINS: &[&str] = &["https://retv.app", "https://ru.retv.app"];
+
+/// The local dev site and the site tests: allowed only by a debug build
+/// (`DEV_BUILD`; audit 2026-11-01 L1), never by a release.
+pub const DEV_ORIGINS: &[&str] = &[
     "http://127.0.0.1:5180",
     "http://localhost:5180",
     "http://127.0.0.1:4189",
-    "https://retv.app",
-    "https://ru.retv.app",
 ];
+
+/// Whether this build also takes `DEV_ORIGINS` (debug builds only). The app
+/// and the CLI pass it as `ServerConfig::dev_origins`.
+pub const DEV_BUILD: bool = cfg!(debug_assertions);
+
+/// The Origins a bridge accepts: the ReTV sites, plus `DEV_ORIGINS` when `dev`.
+pub fn allowed_origins(dev: bool) -> Vec<&'static str> {
+    let mut all = ALLOWED_ORIGINS.to_vec();
+    if dev {
+        all.extend_from_slice(DEV_ORIGINS);
+    }
+    all
+}
+
+/// Whether `origin` (exact, case-sensitive) may open a socket.
+pub fn origin_allowed(origin: &str, dev: bool) -> bool {
+    ALLOWED_ORIGINS.contains(&origin) || (dev && DEV_ORIGINS.contains(&origin))
+}
+
+/// Sockets open without having sent the session token (a new socket counts
+/// until it does); one more upgrade is refused with 503 (audit 2026-11-01 L3).
+pub const MAX_UNPAIRED_SOCKETS: usize = 4;
+/// A socket that has not sent the session token this long after it opened is
+/// closed (1008). Pairing works across sockets, so the site just opens another.
+pub const UNPAIRED_SOCKET_MS: u64 = 60_000;
 
 /// Host names the `Host` header may carry, always followed by `:<bound port>`
 /// (DNS-rebinding guard). Case-sensitive.
@@ -58,3 +85,25 @@ pub const PAIR_MAX_STARTS: u32 = 20;
 
 /// adb's default TCP port, used when neither the client nor mDNS gives one.
 pub const DEFAULT_ADB_PORT: u16 = 5555;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dev_origins_only_when_asked() {
+        for o in DEV_ORIGINS {
+            assert!(!origin_allowed(o, false), "{o}");
+            assert!(origin_allowed(o, true), "{o}");
+        }
+        for o in ALLOWED_ORIGINS {
+            assert!(origin_allowed(o, false), "{o}");
+        }
+        assert!(!origin_allowed("https://evil.example", true));
+        assert_eq!(
+            allowed_origins(false),
+            ["https://retv.app", "https://ru.retv.app"]
+        );
+        assert_eq!(DEV_BUILD, cfg!(debug_assertions));
+    }
+}

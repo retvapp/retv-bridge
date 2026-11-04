@@ -103,6 +103,13 @@ else
 fi
 
 rustup target add aarch64-apple-darwin x86_64-apple-darwin
+# ReTV Home for Samsung goes into the Bridge (crates/samsung/build.rs): its service bundle is built first.
+# RETV_TIZEN_DIR is the app's folder (default: apps/retv-tizen of the ReTV monorepo).
+export RETV_TIZEN_DIR="${RETV_TIZEN_DIR:-$ROOT/../retv-tizen}"
+[ -f "$RETV_TIZEN_DIR/config.xml" ] || die "ReTV Home for Samsung not found in $RETV_TIZEN_DIR (set RETV_TIZEN_DIR)"
+command -v node > /dev/null || die "node is needed to build ReTV Home for Samsung's service"
+node "$RETV_TIZEN_DIR/service/build.js"
+[ -f "$RETV_TIZEN_DIR/service/dist/index.js" ] || die "$RETV_TIZEN_DIR/service/dist/index.js was not built"
 # No path of this Mac in the binaries: the home folder (it names the account), the cargo registry, the toolchain and
 # this checkout become /build/… (scripts/remap-path-flags.sh). CARGO_ENCODED_RUSTFLAGS keeps paths with spaces whole.
 remap_flags

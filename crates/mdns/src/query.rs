@@ -9,17 +9,18 @@ use async_trait::async_trait;
 use simple_dns::{Name, Packet, Question, CLASS, QCLASS, QTYPE, TYPE};
 use socket2::{Domain, Protocol, Socket, Type};
 
-use crate::parse::{SERVICE_ADB, SERVICE_CONNECT, SERVICE_PAIRING};
+use crate::parse::ServiceKind;
 
 pub const MDNS_GROUP: Ipv4Addr = Ipv4Addr::new(224, 0, 0, 251);
 pub const MDNS_PORT: u16 = 5353;
 
-/// PTR questions for the three adb services, class IN with the QU bit.
+/// PTR questions for the three adb services and Fire TV's casting service,
+/// class IN with the QU bit.
 pub fn build_query() -> Vec<u8> {
     let mut pkt = Packet::new_query(0);
-    for svc in [SERVICE_CONNECT, SERVICE_PAIRING, SERVICE_ADB] {
+    for kind in ServiceKind::ALL {
         pkt.questions.push(Question::new(
-            Name::new_unchecked(svc),
+            Name::new_unchecked(kind.service_name()),
             QTYPE::TYPE(TYPE::PTR),
             QCLASS::CLASS(CLASS::IN),
             true,

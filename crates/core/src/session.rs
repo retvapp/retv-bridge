@@ -4,7 +4,9 @@
 //!
 //! - Frames are handled in order: binary or id-less → `bad-request` with
 //!   `id: -1`; `hello`, `pairStart`, `pairFinish` without a token check;
-//!   anything else needs the token (else `bad-token`, then close 1008).
+//!   anything else needs the token (else `bad-token`, then close 1008). A
+//!   socket that has sent no valid token within `unpaired_timeout` is closed
+//!   (1008, "no token"); until it sends one it holds an `UnpairedSlot`.
 //! - Each request's checks and its change to the socket's state (serials,
 //!   upload, install slot) happen as its frame is read, in arrival order;
 //!   only its I/O then runs in a task of its own (at most
@@ -41,7 +43,7 @@ use crate::pairing::{PairFinish, PairStart};
 use crate::protocol::{
     DEFAULT_ADB_PORT, FEATURES, MAX_COMMAND_CHARS, MAX_UPLOAD_BYTES, PROTOCOL_VERSION,
 };
-use crate::server::Shared;
+use crate::server::{Shared, UnpairedSlot};
 use crate::validate::{
     decode_base64, is_allowed_binary_path, is_allowed_device_path, is_installable_apk_url,
     is_lan_ipv4, port_value,
@@ -154,6 +156,8 @@ pub(crate) struct SessionState {
     upload: Mutex<Option<Upload>>,
     installing: AtomicBool,
     closed: AtomicBool,
+    /// A message carried the session token (audit 2026-11-01 L3).
+    paired: AtomicBool,
 }
 
 impl SessionState {
@@ -200,6 +204,7 @@ pub(crate) async fn run_session<S>(
     origin: String,
     shared: Arc<Shared>,
     mut shutdown: watch::Receiver<bool>,
+    unpaired: UnpairedSlot,
 ) where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -209,6 +214,7 @@ pub(crate) async fn run_session<S>(
         upload: Mutex::new(None),
         installing: AtomicBool::new(false),
         closed: AtomicBool::new(false),
+        paired: AtomicBool::new(false),
     });
     let id = shared.register(state.clone());
     shared.log(format!("[bridge] client connected: {origin}"));
@@ -216,6 +222,10 @@ pub(crate) async fn run_session<S>(
     let (out_tx, mut out_rx) = mpsc::unbounded_channel::<String>();
     let (cancel_tx, cancel_rx) = watch::channel(false);
     let mut tasks: JoinSet<()> = JoinSet::new();
+    // Given back once a message carries the token; the socket closes if none does in time.
+    let mut unpaired = Some(unpaired);
+    let pair_deadline = tokio::time::sleep(shared.unpaired_timeout);
+    tokio::pin!(pair_deadline);
 
     // Why the bridge closes the socket: (code, reason, frame left half-read).
     let close: Option<(CloseCode, &'static str, bool)> = loop {
@@ -228,7 +238,11 @@ pub(crate) async fn run_session<S>(
             msg = ws.next() => match msg {
                 None => break None,
                 Some(Ok(Message::Text(t))) => {
-                    match on_text(t.as_str(), &shared, &state, &out_tx, &cancel_rx, &mut tasks) {
+                    let frame = on_text(t.as_str(), &shared, &state, &out_tx, &cancel_rx, &mut tasks);
+                    if unpaired.is_some() && state.paired.load(Ordering::SeqCst) {
+                        unpaired = None;
+                    }
+                    match frame {
                         Frame::Spawned => {}
                         Frame::Reply(r) => {
                             if ws.send(Message::text(r)).await.is_err() {
@@ -259,6 +273,10 @@ pub(crate) async fn run_session<S>(
                 }
             },
             _ = cancelled(&mut shutdown) => break Some((CloseCode::Away, "bridge stopping", false)),
+            () = &mut pair_deadline, if unpaired.is_some() => {
+                shared.log(format!("[bridge] closing a socket from {origin}: no token in time"));
+                break Some((CloseCode::Policy, "no token", false));
+            }
             Some(_) = tasks.join_next(), if !tasks.is_empty() => {}
         }
     };
@@ -352,8 +370,12 @@ fn on_text(
     if kind == "pairStart" || kind == "pairFinish" {
         return Frame::Reply(pair_reply(kind, &msg, &id, shared, &state.origin));
     }
-    if kind != "hello" && !shared.token_matches(msg.get("token")) {
+    let authed = shared.token_matches(msg.get("token"));
+    if kind != "hello" && !authed {
         return Frame::BadToken(reply_err(&id, &WireError::new("bad-token")));
+    }
+    if authed {
+        state.paired.store(true, Ordering::SeqCst);
     }
     while tasks.try_join_next().is_some() {}
     if tasks.len() >= MAX_REQUESTS_IN_FLIGHT {
@@ -365,7 +387,7 @@ fn on_text(
     }
     let prepared = if kind == "hello" {
         // No token needed: the site learns whether its stored token is still good.
-        let paired = shared.token_matches(msg.get("token"));
+        let paired = authed;
         let shared = shared.clone();
         later(async move {
             let adb = shared.adb.available().await;

@@ -1,0 +1,16 @@
+{
+  "en": [
+    "Samsung TVs: Bridge installs ReTV Home, removes unused apps and turns off interest-based ads by itself",
+    "ReTV Home on Samsung: folders, hide apps, a clear All apps button, Samsung Settings as an app",
+    "Amazon Fire TV: Bridge finds the stick and turns on the Home button for ReTV Home",
+    "Bridge shows in the Dock and in Cmd+Tab",
+    "Sign in to your ReTV account in the app"
+  ],
+  "ru": [
+    "Телевизоры Samsung: Bridge сам ставит ReTV Home, удаляет ненужные приложения и выключает рекламу по интересам",
+    "ReTV Home на Samsung: папки, скрытие приложений, заметная кнопка «Все приложения», настройки Samsung как приложение",
+    "Amazon Fire TV: Bridge находит приставку и включает кнопку «Домой» для ReTV Home",
+    "Bridge виден в Dock и в Cmd+Tab",
+    "Вход в аккаунт ReTV прямо в приложении"
+  ]
+}
