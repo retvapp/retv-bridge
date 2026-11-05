@@ -1,0 +1,12 @@
+{
+  "en": [
+    "ReTV Bridge is now out for Windows 10 (version 2004 or newer) and Windows 11, 64-bit",
+    "The Windows installer has no code signature yet: Windows may warn that the publisher is unknown. Press More info, then Run anyway",
+    "On a Mac nothing changes in this version"
+  ],
+  "ru": [
+    "ReTV Bridge вышел для Windows 10 (версия 2004 или новее) и Windows 11, 64 бита",
+    "У установщика для Windows пока нет подписи: Windows может предупредить, что издатель неизвестен. Нажмите «Подробнее», затем «Выполнить в любом случае»",
+    "На Mac в этой версии ничего не меняется"
+  ]
+}

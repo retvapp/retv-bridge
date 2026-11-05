@@ -3325,7 +3325,7 @@ dependencies = [
 
 [[package]]
 name = "retv-bridge-account"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "bytes",
  "reqwest",
@@ -3339,7 +3339,7 @@ dependencies = [
 
 [[package]]
 name = "retv-bridge-adb"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "async-trait",
  "reqwest",
@@ -3353,7 +3353,7 @@ dependencies = [
 
 [[package]]
 name = "retv-bridge-app"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "block2",
  "iana-time-zone",
@@ -3383,7 +3383,7 @@ dependencies = [
 
 [[package]]
 name = "retv-bridge-cli"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "rand 0.8.6",
  "retv-bridge-adb",
@@ -3394,7 +3394,7 @@ dependencies = [
 
 [[package]]
 name = "retv-bridge-core"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "async-trait",
  "futures-util",
@@ -3410,7 +3410,7 @@ dependencies = [
 
 [[package]]
 name = "retv-bridge-mdns"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "async-trait",
  "if-addrs",
@@ -3423,7 +3423,7 @@ dependencies = [
 
 [[package]]
 name = "retv-bridge-samsung"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "base64 0.22.1",
  "bytes",

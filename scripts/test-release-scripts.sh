@@ -465,6 +465,16 @@ got_route="$(env -i PATH="$PATH" bash "$HERE/win-route.sh")"
 [ "$got_route" = UNSIGNED ] && ok "win-route: the committed file says UNSIGNED" || bad "win-route: the committed file says UNSIGNED"
 [ -x "$HERE/win-route.sh" ] && ok "win-route: executable, the workflow runs it directly" || bad "win-route: executable, the workflow runs it directly"
 
+# --- release.yml: Windows never waits for a Mac runner -------------------------
+WORKFLOW="$HERE/../.github/workflows/release.yml"
+job_block() { awk -v job="  $1:" '$0 == job { on = 1; next } on && /^  [a-z]/ { exit } on' "$WORKFLOW"; }
+for job in win-build win-updater-sig win-sign; do
+  job_block "$job" | grep -qx '    runs-on: windows-latest' && ok "release.yml: $job runs on Windows" || bad "release.yml: $job runs on Windows"
+done
+job_block mac | grep -q "vars.BRIDGE_MAC_LOCAL != 'true'" && ok "release.yml: BRIDGE_MAC_LOCAL skips the mac job" || bad "release.yml: BRIDGE_MAC_LOCAL skips the mac job"
+job_block publish | grep -q "vars.BRIDGE_MAC_LOCAL == 'true' && needs.mac.result == 'skipped'" \
+  && ok "release.yml: publish goes on without mac only with BRIDGE_MAC_LOCAL" || bad "release.yml: publish goes on without mac only with BRIDGE_MAC_LOCAL"
+
 echo
 echo "$GOOD passed, $FAILED failed"
 [ "$FAILED" -eq 0 ]

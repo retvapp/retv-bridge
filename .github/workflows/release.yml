@@ -8,13 +8,18 @@
 #
 # Secrets live in the `release` environment (the owner is its required
 # reviewer). The `mac` job and `win-updater-sig` or `win-sign` become ready at
-# the same moment, so one approval covers them. SIGNPATH_ORGANIZATION_ID and
-# BRIDGE_MAC_ONLY are repository variables: a job-level `if:` is evaluated before
-# the environment is entered.
+# the same moment, so one approval covers them. SIGNPATH_ORGANIZATION_ID,
+# BRIDGE_MAC_ONLY and BRIDGE_MAC_LOCAL are repository variables: a job-level `if:`
+# is evaluated before the environment is entered.
 #
 # Mac only: with the repository variable BRIDGE_MAC_ONLY = true no Windows job
 # runs and the draft holds the Mac assets only; scripts/release-retv-bridge.sh
 # --mac-only stages it with a manifest that has no Windows entry.
+#
+# Mac built locally: with the repository variable BRIDGE_MAC_LOCAL = true the `mac`
+# job is skipped and the draft holds the Windows assets only, so a release does not
+# wait for a macos-15 runner (on 2026-11-05 none took the job). The Mac half comes
+# from scripts/build-mac-local.sh and joins them at staging.
 name: Release
 
 on:
@@ -62,6 +67,12 @@ jobs:
           route="$(scripts/win-route.sh)"
           echo "Windows route: $route"
           echo "route=$route" >> "$GITHUB_OUTPUT"
+
+      - name: Something to build
+        if: vars.BRIDGE_MAC_ONLY == 'true' && vars.BRIDGE_MAC_LOCAL == 'true'
+        run: |
+          echo "BRIDGE_MAC_ONLY and BRIDGE_MAC_LOCAL are both true: no job would build anything; unset one" >&2
+          exit 1
 
   test:
     needs: check
@@ -181,19 +192,22 @@ jobs:
   win-updater-sig:
     needs: [test, win-build]
     if: needs.test.outputs.win-route == 'UNSIGNED' && vars.BRIDGE_MAC_ONLY != 'true'
-    # Where the `mac` job already installs tauri-cli.
-    runs-on: macos-15
+    # Not macos-15: the Windows release must not wait for a Mac runner. win-build installs
+    # the same toolchain and tauri-cli here.
+    runs-on: windows-latest
     environment: release
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       VERSION: ${{ needs.test.outputs.version }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install toolchain
+        shell: bash
         run: rustup show active-toolchain || rustup toolchain install
 
       - name: Install tauri-cli
+        shell: bash
         run: cargo install tauri-cli --version "=$TAURI_CLI_VERSION" --locked
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -202,6 +216,7 @@ jobs:
           path: signed
 
       - name: Updater signature
+        shell: bash
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -343,8 +358,10 @@ jobs:
     # Waits for win-build so that its approval is asked together with win-updater-sig or win-sign.
     needs: [test, win-build]
     # win-build is skipped on a Mac-only release; the Mac build runs all the same.
+    # BRIDGE_MAC_LOCAL: the Mac half is built on the owner's Mac instead.
     if: >-
       !cancelled()
+      && vars.BRIDGE_MAC_LOCAL != 'true'
       && needs.test.result == 'success'
       && (needs.win-build.result == 'success'
           || (vars.BRIDGE_MAC_ONLY == 'true' && needs.win-build.result == 'skipped'))
@@ -511,11 +528,13 @@ jobs:
     needs: [test, win-build, win-updater-sig, win-sign, mac]
     # The job of the committed Windows route must have succeeded: a failed win-sign or
     # win-updater-sig stops the release, and no route falls back to another.
-    # A Mac-only release (BRIDGE_MAC_ONLY) has no Windows asset at all.
+    # A Mac-only release (BRIDGE_MAC_ONLY) has no Windows asset at all, a release with the
+    # Mac built locally (BRIDGE_MAC_LOCAL) no Mac asset.
     if: >-
       !cancelled()
       && needs.test.result == 'success'
-      && needs.mac.result == 'success'
+      && (needs.mac.result == 'success'
+          || (vars.BRIDGE_MAC_LOCAL == 'true' && needs.mac.result == 'skipped'))
       && ((vars.BRIDGE_MAC_ONLY == 'true' && needs.win-build.result == 'skipped')
           || (vars.BRIDGE_MAC_ONLY != 'true'
               && needs.win-build.result == 'success'
@@ -528,6 +547,7 @@ jobs:
       VERSION: ${{ needs.test.outputs.version }}
       WIN_ROUTE: ${{ needs.test.outputs.win-route }}
       MAC_ONLY: ${{ vars.BRIDGE_MAC_ONLY == 'true' }}
+      MAC_LOCAL: ${{ vars.BRIDGE_MAC_LOCAL == 'true' }}
       MAC_ROUTE: ${{ needs.mac.outputs.route }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -535,6 +555,7 @@ jobs:
           persist-credentials: false
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: vars.BRIDGE_MAC_LOCAL != 'true'
         with:
           name: mac
           path: assets
@@ -548,15 +569,15 @@ jobs:
       - name: Check the asset list
         run: |
           base="ReTV-Bridge-$VERSION"
-          expected="$base-mac-universal.app.tar.gz
-          $base-mac-universal.app.tar.gz.sig
-          $base-mac-universal.dmg"
-          if [ "$MAC_ONLY" != true ]; then
-            expected="$expected
-          $base-win-x64-setup.exe
-          $base-win-x64-setup.exe.sig"
-          fi
-          expected="$(printf '%s\n' "$expected" | sed 's/^ *//' | sort)"
+          expected="$(
+            if [ "$MAC_LOCAL" != true ]; then
+              printf '%s\n' "$base-mac-universal.app.tar.gz" "$base-mac-universal.app.tar.gz.sig" "$base-mac-universal.dmg"
+            fi
+            if [ "$MAC_ONLY" != true ]; then
+              printf '%s\n' "$base-win-x64-setup.exe" "$base-win-x64-setup.exe.sig"
+            fi
+          )"
+          expected="$(printf '%s\n' "$expected" | sort)"
           actual="$(find assets -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)"
           if [ "$expected" != "$actual" ]; then
             printf 'expected:\n%s\nfound:\n%s\n' "$expected" "$actual" >&2
@@ -564,8 +585,15 @@ jobs:
           fi
           (cd assets && sha256sum -- *)
 
+      # With BRIDGE_MAC_LOCAL there is no `mac` job to name the route: build-mac-local.sh
+      # follows release-team-id, so the body does too.
       - name: Release notes
         run: |
+          mac_route="$MAC_ROUTE"
+          if [ "$MAC_LOCAL" = true ]; then
+            team="$({ grep -v '^[[:space:]]*#' release-team-id || true; } | tr -d '[:space:]')"
+            if [ "$team" = UNSIGNED-ADHOC ]; then mac_route=unsigned; else mac_route=signed; fi
+          fi
           perl -MJSON::PP -e '
             local $/; open(my $h, "<", $ARGV[0]) or die; my $n = JSON::PP->new->utf8->decode(<$h>);
             binmode STDOUT, ":utf8";
@@ -583,7 +611,7 @@ jobs:
               print "on older macOS Control-click the app \x{2192} Open. Updates are verified with the updater signature as usual.\n\n";
             }
             for my $lang (qw(en ru)) { print "### $lang\n\n"; print "- $_\n" for @{$n->{$lang}}; print "\n" }
-          ' "release-notes/$VERSION.json" "$VERSION" "$WIN_ROUTE" "$MAC_ROUTE" "$MAC_ONLY" > "$RUNNER_TEMP/body.md"
+          ' "release-notes/$VERSION.json" "$VERSION" "$WIN_ROUTE" "$mac_route" "$MAC_ONLY" > "$RUNNER_TEMP/body.md"
 
       # The unsigned Mac and Windows routes are not pre-releases: they are the chosen
       # production path.
