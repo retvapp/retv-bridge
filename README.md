@@ -70,7 +70,7 @@ cargo install tauri-cli --locked
 cargo tauri build                   # Windows / macOS tray app
 ```
 
-Release builds are made by GitHub Actions from tags `bridge-v*` and are signed as described in [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md).
+Release builds are made by GitHub Actions from tags `bridge-v*`. [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md) says how they are signed.
 
 `tauri.conf.json` asks for updater artifacts, so `cargo tauri build` needs the updater key (below). A local build without it:
 `cargo tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}'`.

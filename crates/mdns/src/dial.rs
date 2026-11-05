@@ -287,7 +287,12 @@ impl DialFinder for SystemDial {
             let tx = tx.clone();
             readers.spawn(async move {
                 let mut buf = [0u8; 2048];
-                while let Ok((n, from)) = s.recv_from(&mut buf).await {
+                loop {
+                    // An error is about one datagram, so the search goes on: Windows fails the read of an
+                    // answer longer than the buffer (WSAEMSGSIZE) where Unix cuts it.
+                    let Ok((n, from)) = s.recv_from(&mut buf).await else {
+                        continue;
+                    };
                     let SocketAddr::V4(from) = from else { continue };
                     if let Some(url) = parse_ssdp_answer(&buf[..n], *from.ip()) {
                         let _ = tx.try_send(url);

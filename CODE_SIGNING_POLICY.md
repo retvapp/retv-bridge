@@ -1,17 +1,21 @@
 # Code signing policy
 
-Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
-
 ## What is signed
 
-Only release builds of ReTV Bridge, made by GitHub Actions on GitHub-hosted runners from tags matching `bridge-v*`, are submitted for signing. Nothing built on a developer's machine is signed with this certificate.
+Release builds of ReTV Bridge are made by GitHub Actions on GitHub-hosted runners from tags matching `bridge-v*`.
+
+- **Windows:** the installer has no code signature. Windows may warn that the publisher is unknown: press More info, then Run anyway.
+- **macOS:** the app is ad-hoc signed and not notarized by Apple. macOS asks once before the first start.
+- **Updates, on both systems:** every update is signed with the project's updater key, and the installed app refuses an update that does not verify against the public key it was built with.
+
+The site lists the SHA-256 of every installer at https://retv.app/downloads.
 
 ## Team roles
 
 - **Committers and reviewers:** the project maintainers who have write access to this repository. Changes reach the release branch through review.
-- **Approver:** the project owner. Each signing request is approved manually by the owner; no request is auto-approved.
+- **Approver:** the project owner. Each release build is approved manually by the owner before it can use the updater key.
 
-Roles are named by role, not by person. All team members use multi-factor authentication on GitHub and SignPath.
+Roles are named by role, not by person. All team members use multi-factor authentication on GitHub.
 
 ## Privacy
 

@@ -4,6 +4,11 @@
 # moves to gtk-rs 0.19+ / zbus 6, and drop the line once `cargo audit` no longer reports it.
 [advisories]
 ignore = [
+    # rsa: Marvin Attack (timing side channel), no fixed version yet. Owner's decision 2026-11-05. We use it only to make
+    # the Samsung certificate request and to sign the TV package on the person's own computer, with that person's own
+    # key: no server, no attacker-chosen ciphertexts, nothing decrypted, nothing an outsider can time. Drop this line and
+    # update as soon as a fixed rsa is out.
+    "RUSTSEC-2023-0071",
     # proc-macro-error 1.0.4 is unmaintained. Build-time only: glib-macros (gtk-rs 0.18) <- gtk <- tray-icon <- tauri.
     "RUSTSEC-2024-0370",
     # glib 0.18.5: unsound VariantStrIter impls. Linux only: atk/gtk <- libappindicator <- tray-icon <- tauri; we never

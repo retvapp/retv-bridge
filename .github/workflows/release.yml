@@ -1,17 +1,18 @@
 # Release builds for tags bridge-v<semver>: a universal macOS DMG (ad-hoc
 # signed and not notarized while no Apple credentials are set, the default;
-# Developer ID signed and notarized once they are), a SignPath-signed Windows
-# NSIS installer, and Tauri updater signatures made over the final (signed)
+# Developer ID signed and notarized once they are), a Windows NSIS installer
+# (no Authenticode signature, or signed by SignPath: the committed
+# release-win-route decides), and Tauri updater signatures made over the final
 # bytes. The result is a DRAFT GitHub release; nothing is published or staged
 # on retv.app from here.
 #
 # Secrets live in the `release` environment (the owner is its required
-# reviewer). The `mac` and `win-sign` jobs become ready at the same moment, so
-# one approval covers both. SIGNPATH_ORGANIZATION_ID and BRIDGE_MAC_ONLY are
-# repository variables: a job-level `if:` is evaluated before the environment is
-# entered.
+# reviewer). The `mac` job and `win-updater-sig` or `win-sign` become ready at
+# the same moment, so one approval covers them. SIGNPATH_ORGANIZATION_ID and
+# BRIDGE_MAC_ONLY are repository variables: a job-level `if:` is evaluated before
+# the environment is entered.
 #
-# Mac first: with the repository variable BRIDGE_MAC_ONLY = true no Windows job
+# Mac only: with the repository variable BRIDGE_MAC_ONLY = true no Windows job
 # runs and the draft holds the Mac assets only; scripts/release-retv-bridge.sh
 # --mac-only stages it with a manifest that has no Windows entry.
 name: Release
@@ -35,12 +36,15 @@ env:
 jobs:
   # Seconds, before anything long: the tag, tauri.conf.json, Cargo.toml and Cargo.lock
   # agree, the updater key is real, and release-notes/<version>.json follows
-  # release-notes/README.md (the rules the download manifest applies at staging).
+  # release-notes/README.md (the rules the download manifest applies at staging). The
+  # committed release-win-route picks the Windows route and must agree with the
+  # repository variable SIGNPATH_ORGANIZATION_ID.
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       version: ${{ steps.version.outputs.version }}
+      win-route: ${{ steps.win-route.outputs.route }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -50,11 +54,21 @@ jobs:
           version="$(scripts/release-version.sh "$GITHUB_REF_NAME")"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Windows route
+        id: win-route
+        env:
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+        run: |
+          route="$(scripts/win-route.sh)"
+          echo "Windows route: $route"
+          echo "route=$route" >> "$GITHUB_OUTPUT"
+
   test:
     needs: check
     runs-on: ubuntu-latest
     outputs:
       version: ${{ needs.check.outputs.version }}
+      win-route: ${{ needs.check.outputs.win-route }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -72,13 +86,13 @@ jobs:
       - name: Test
         run: cargo test --workspace --locked
 
-  # Pass 0 of the two-pass Windows signing (no secrets here). Tauri's signCommand is
-  # scripts/win-sign-hook.mjs in capture mode: it signs nothing, it copies out the app
-  # (retv-bridge.exe, after Tauri patched the bundle type into it) and the NSIS
-  # uninstaller (from makensis' !uninstfinalize), which SignPath signs in win-sign.
-  # The setup built here, with that unsigned payload, is the -UNSIGNED internal beta
-  # when SignPath is not set up. No updater artifacts: the updater signature must cover
-  # the final, signed installer, and no updater key is available to this job.
+  # The Windows build (no secrets here). Tauri's signCommand is scripts/win-sign-hook.mjs
+  # in capture mode: it signs nothing, it copies out the app (retv-bridge.exe, after Tauri
+  # patched the bundle type into it) and the NSIS uninstaller (from makensis'
+  # !uninstfinalize). On the SIGNPATH route that payload is pass 0 of the two-pass signing
+  # in win-sign; on the UNSIGNED route the setup built here is the release installer. No
+  # updater artifacts: the updater signature must cover the final installer, and no
+  # updater key is available to this job.
   win-build:
     needs: test
     if: vars.BRIDGE_MAC_ONLY != 'true'
@@ -161,7 +175,47 @@ jobs:
             dist/inner/uninstall.exe
           if-no-files-found: error
 
-  # Two SignPath requests, each approved by the owner in SignPath:
+  # The UNSIGNED route: the updater signature over the installer of win-build, which is
+  # the release installer as it is. This job holds the updater key, so it is approved
+  # together with `mac`; win-build, which compiles and runs build scripts, never sees the key.
+  win-updater-sig:
+    needs: [test, win-build]
+    if: needs.test.outputs.win-route == 'UNSIGNED' && vars.BRIDGE_MAC_ONLY != 'true'
+    # Where the `mac` job already installs tauri-cli.
+    runs-on: macos-15
+    environment: release
+    timeout-minutes: 30
+    env:
+      VERSION: ${{ needs.test.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - name: Install tauri-cli
+        run: cargo install tauri-cli --version "=$TAURI_CLI_VERSION" --locked
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: win-unsigned
+          path: signed
+
+      - name: Updater signature
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: cargo tauri signer sign --app-version "$VERSION" "signed/ReTV-Bridge-$VERSION-win-x64-setup.exe"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: win-release
+          path: |
+            signed/ReTV-Bridge-${{ needs.test.outputs.version }}-win-x64-setup.exe
+            signed/ReTV-Bridge-${{ needs.test.outputs.version }}-win-x64-setup.exe.sig
+          if-no-files-found: error
+
+  # The SIGNPATH route. Two SignPath requests, each approved by the owner in SignPath:
   #   pass 1  the app and the uninstaller (artifact configuration inner-binaries);
   #   pass 2  the installer bundled around them again (nsis-installer).
   # Between them `cargo tauri bundle` packs the signed app (--no-binary-patching keeps
@@ -169,7 +223,7 @@ jobs:
   # one makensis builds, after checking it is the very uninstaller signed in pass 1.
   win-sign:
     needs: [test, win-build]
-    if: vars.SIGNPATH_ORGANIZATION_ID != '' && vars.BRIDGE_MAC_ONLY != 'true'
+    if: needs.test.outputs.win-route == 'SIGNPATH' && vars.BRIDGE_MAC_ONLY != 'true'
     runs-on: windows-latest
     environment: release
     timeout-minutes: 180
@@ -279,14 +333,14 @@ jobs:
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: win-signed
+          name: win-release
           path: |
             signed/ReTV-Bridge-${{ needs.test.outputs.version }}-win-x64-setup.exe
             signed/ReTV-Bridge-${{ needs.test.outputs.version }}-win-x64-setup.exe.sig
           if-no-files-found: error
 
   mac:
-    # Waits for win-build so that its approval is asked together with win-sign.
+    # Waits for win-build so that its approval is asked together with win-updater-sig or win-sign.
     needs: [test, win-build]
     # win-build is skipped on a Mac-only release; the Mac build runs all the same.
     if: >-
@@ -454,11 +508,9 @@ jobs:
         run: rm -f "$RUNNER_TEMP/AuthKey.p8"
 
   publish:
-    needs: [test, win-build, win-sign, mac]
-    # Without SignPath (repository variable unset) the unsigned installer goes
-    # into the draft as -UNSIGNED.exe for internal beta; scripts/release-retv-bridge.sh
-    # never stages it (only the Mac half, with --mac-only). With SignPath set up, a
-    # failed win-sign stops the release.
+    needs: [test, win-build, win-updater-sig, win-sign, mac]
+    # The job of the committed Windows route must have succeeded: a failed win-sign or
+    # win-updater-sig stops the release, and no route falls back to another.
     # A Mac-only release (BRIDGE_MAC_ONLY) has no Windows asset at all.
     if: >-
       !cancelled()
@@ -467,14 +519,14 @@ jobs:
       && ((vars.BRIDGE_MAC_ONLY == 'true' && needs.win-build.result == 'skipped')
           || (vars.BRIDGE_MAC_ONLY != 'true'
               && needs.win-build.result == 'success'
-              && (needs.win-sign.result == 'success'
-                  || (vars.SIGNPATH_ORGANIZATION_ID == '' && needs.win-sign.result == 'skipped'))))
+              && ((needs.test.outputs.win-route == 'UNSIGNED' && needs.win-updater-sig.result == 'success')
+                  || (needs.test.outputs.win-route == 'SIGNPATH' && needs.win-sign.result == 'success'))))
     runs-on: ubuntu-latest
     permissions:
       contents: write
     env:
       VERSION: ${{ needs.test.outputs.version }}
-      SIGNED: ${{ needs.win-sign.result == 'success' }}
+      WIN_ROUTE: ${{ needs.test.outputs.win-route }}
       MAC_ONLY: ${{ vars.BRIDGE_MAC_ONLY == 'true' }}
       MAC_ROUTE: ${{ needs.mac.outputs.route }}
     steps:
@@ -488,20 +540,10 @@ jobs:
           path: assets
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        if: needs.win-sign.result == 'success'
+        if: vars.BRIDGE_MAC_ONLY != 'true'
         with:
-          name: win-signed
+          name: win-release
           path: assets
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        if: needs.win-sign.result != 'success' && vars.BRIDGE_MAC_ONLY != 'true'
-        with:
-          name: win-unsigned
-          path: unsigned
-
-      - name: Mark the unsigned installer
-        if: needs.win-sign.result != 'success' && vars.BRIDGE_MAC_ONLY != 'true'
-        run: mv "unsigned/ReTV-Bridge-$VERSION-win-x64-setup.exe" "assets/ReTV-Bridge-$VERSION-win-x64-setup-UNSIGNED.exe"
 
       - name: Check the asset list
         run: |
@@ -509,15 +551,10 @@ jobs:
           expected="$base-mac-universal.app.tar.gz
           $base-mac-universal.app.tar.gz.sig
           $base-mac-universal.dmg"
-          if [ "$MAC_ONLY" = true ]; then
-            :
-          elif [ "$SIGNED" = true ]; then
+          if [ "$MAC_ONLY" != true ]; then
             expected="$expected
           $base-win-x64-setup.exe
           $base-win-x64-setup.exe.sig"
-          else
-            expected="$expected
-          $base-win-x64-setup-UNSIGNED.exe"
           fi
           expected="$(printf '%s\n' "$expected" | sed 's/^ *//' | sort)"
           actual="$(find assets -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)"
@@ -535,10 +572,10 @@ jobs:
             if ($ARGV[4] eq "true") {
               # The body is published as is: only text for the people who download the app.
               print "> [!NOTE]\n> This release is for Mac only. The Windows version is coming.\n\n";
-            } elsif ($ARGV[2] ne "true") {
-              print "> [!WARNING]\n> The Windows installer in this draft is NOT code-signed (SignPath not set up yet). ";
-              print "The Windows half is internal beta only and is never staged on retv.app; ";
-              print "the Mac half may be staged with scripts/release-retv-bridge.sh --mac-only. Do not publish this draft.\n\n";
+            } elsif ($ARGV[2] eq "UNSIGNED") {
+              print "> [!NOTE]\n> The Windows installer has no code signature. ";
+              print "Windows may warn that the publisher is unknown: press More info \x{2192} Run anyway. ";
+              print "Updates are verified with the updater signature as usual.\n\n";
             }
             if ($ARGV[3] eq "unsigned") {
               print "> [!NOTE]\n> The macOS build is ad-hoc signed and not notarized by Apple. ";
@@ -546,16 +583,16 @@ jobs:
               print "on older macOS Control-click the app \x{2192} Open. Updates are verified with the updater signature as usual.\n\n";
             }
             for my $lang (qw(en ru)) { print "### $lang\n\n"; print "- $_\n" for @{$n->{$lang}}; print "\n" }
-          ' "release-notes/$VERSION.json" "$VERSION" "$SIGNED" "$MAC_ROUTE" "$MAC_ONLY" > "$RUNNER_TEMP/body.md"
+          ' "release-notes/$VERSION.json" "$VERSION" "$WIN_ROUTE" "$MAC_ROUTE" "$MAC_ONLY" > "$RUNNER_TEMP/body.md"
 
-      # An unsigned Windows build is always a pre-release, and says so in its name.
-      # The unsigned Mac route is not: it is the chosen production path.
+      # The unsigned Mac and Windows routes are not pre-releases: they are the chosen
+      # production path.
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           draft: true
-          prerelease: ${{ contains(needs.test.outputs.version, '-') || (needs.win-sign.result != 'success' && vars.BRIDGE_MAC_ONLY != 'true') }}
+          prerelease: ${{ contains(needs.test.outputs.version, '-') }}
           tag_name: ${{ github.ref_name }}
-          name: ReTV Bridge ${{ needs.test.outputs.version }}${{ vars.BRIDGE_MAC_ONLY == 'true' && ' (Mac only)' || (needs.win-sign.result != 'success' && ' (UNSIGNED Windows – internal beta)' || '') }}
+          name: ReTV Bridge ${{ needs.test.outputs.version }}${{ vars.BRIDGE_MAC_ONLY == 'true' && ' (Mac only)' || '' }}
           body_path: ${{ runner.temp }}/body.md
           files: assets/*
           fail_on_unmatched_files: true

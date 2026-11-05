@@ -1,0 +1,3 @@
+# Every checkout has the bytes of the repository. A Windows runner would otherwise turn LF into CRLF, and the bash scripts
+# the release workflow runs there (scripts/remap-path-flags.sh) would stop at their first line.
+* -text

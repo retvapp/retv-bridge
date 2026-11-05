@@ -1,0 +1,4 @@
+# How the Windows installer ships (docs/bridge/releases.md, «Windows without a code signature»):
+#   UNSIGNED  no Authenticode signature (owner decision 2026-11-05); the updater signature still covers the installer
+#   SIGNPATH  signed by SignPath Foundation
+UNSIGNED

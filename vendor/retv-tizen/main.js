@@ -1,8 +1,9 @@
-// ReTV Home for Samsung (Tizen web app): the profile chip, the clock, a hero for the focused app, the dock, «Все
-// приложения» (a button under the dock), the app menu (OK held or Tools: open, move, add to or remove from the dock,
-// into a folder, hide; «Изменить док» in «Все приложения»), folders, hidden apps, and a small settings panel with the
-// ReTV sign-in by code. Smart Hub cannot be replaced on a retail
-// Samsung; with «Autorun Last App» on, the TV reopens this app at power-on.
+// ReTV Home for Samsung (Tizen web app): the profile chip and the gear (Settings) on the top line, a card there when
+// DNS must go back to automatic, the clock, a hero for the focused app, the dock, «Все приложения» (a button under
+// the dock), the app menu (OK held or Tools: open, move, add to or remove from the dock, into a folder, hide;
+// «Изменить док» in «Все приложения»), and a small settings panel with the ReTV sign-in by code. Folders and the
+// hidden apps are in folders.js, «DNS без рекламы» in dns.js. Smart Hub cannot be replaced on a retail Samsung; with
+// «Autorun Last App» on, the TV reopens this app at power-on.
 //
 // Speed rules (2021 TVs, Chromium 76 era, armv7): the last app list is painted from localStorage before the TV answers;
 // a key press moves one ring with a transform and toggles a class on two tiles, nothing is rebuilt; the hero changes
@@ -19,7 +20,7 @@
   var K = { apps: "retv.apps", recent: "retv.recent", key: "retv.key", token: "retv.token", cell: "retv.cell", ent: "retv.ent", label: "retv.label",
     dns: "retv.dns", ret: "retv.return", privacyAt: "retv.privacyAt", before: "retv.before",
     dnsAt: "retv.dnsAt", dnsLast: "retv.dnsLast", dock: "retv.dock", noLaunch: "retv.noLaunch",
-    folders: "retv.folders", hidden: "retv.hidden", menuUses: "retv.menuUses" };
+    folders: "retv.folders", hidden: "retv.hidden", menuUses: "retv.menuUses", coach: "retv.coach", dnsServers: "retv.dnsServers" };
 
   function $(id) { return document.getElementById(id); }
   function read(k, def) { try { var v = localStorage.getItem(k); return v == null ? def : JSON.parse(v); } catch (e) { return def; } }
@@ -31,12 +32,16 @@
   var heroArt = $("heroArt"), heroLabel = $("heroLabel"), heroIcon = $("heroIcon"), heroName = $("heroName");
   var all = $("all"), grid = $("grid"), gridRing = $("gridRing"), panel = $("panel"), panelBody = $("panelBody");
   var allEdit = $("allEdit"), allHint = $("allHint"), menuEl = $("menu"), menuBody = $("menuBody");
-  var allBtn = $("allLine"), hintEl = $("hint"), foldEl = $("fold"), foldGrid = $("foldGrid"), foldRing = $("foldRing");
-  var foldHint = $("foldHint"), heroMinis = $("heroMinis");
+  var allBtn = $("allLine"), hintEl = $("hint"), foldHint = $("foldHint"), heroMinis = $("heroMinis");
+  var gear = $("gear"), warn = $("warn"), coachEl = $("coach");
   var M = S.menu, F = S.folder;
 
   // --- Static text ---
   $("chipDisc").textContent = S.profile.charAt(0);
+  gear.setAttribute("aria-label", S.settings);
+  warn.firstChild.textContent = O.dnsRevertCard;
+  warn.lastChild.textContent = O.dnsRevertHow;
+  coachEl.textContent = M.coach;
   $("chipName").textContent = S.profile;
   allBtn.firstChild.textContent = M.allBtn;
   hintEl.textContent = M.homeHint;
@@ -73,9 +78,31 @@
   // --- Apps ---
   var recent = read(K.recent, []);
   if (!Array.isArray(recent)) recent = [];
-  // Samsung apps whose launch failed on this TV (not every TV lets a web app open them): hidden from then on.
-  var noLaunch = read(K.noLaunch, []);
-  if (!Array.isArray(noLaunch)) noLaunch = [];
+  // Samsung apps this TV will not open (not every TV lets a web app open them): hidden after two failures unless one
+  // ever opened, afresh with a new firmware or ReTV Home (checked again once Samsung's webapis answer), and listed in
+  // «Скрытые приложения», where OK brings one back.
+  var book = L.launchBook(read(K.noLaunch, null), null, VERSION), blocked = L.blockedIds(book);
+  function setBook(b) {
+    if (b === book) return;
+    book = b;
+    write(K.noLaunch, b);
+    var was = blocked.join(), now = L.blockedIds(b);
+    blocked = now;
+    if (now.join() !== was) setApps(raw, false);
+  }
+  function firmware() { try { return String(webapis.productinfo.getFirmware() || ""); } catch (e) { return ""; } }
+  function checkFirmware() {
+    var fw = firmware();
+    if (fw && fw !== book.fw) setBook(L.launchBook(book, fw, VERSION));
+  }
+  /** The installed apps hidden because this TV will not open them, in home order. */
+  function blockedApps() {
+    if (!blocked.length) return [];
+    var list = raw.filter(function (a) { return blocked.indexOf(a.id) >= 0; });
+    return L.order(list, recent).map(function (a) { return { id: a.id, name: a.name, iconPath: a.iconPath, blocked: true }; });
+  }
+  /** What «Скрытые приложения» lists: the person's hidden apps, then those this TV would not open. */
+  function hiddenAll() { return L.hiddenApps(apps, hidden).concat(blockedApps()); }
   var saved = L.dockIds(read(K.dock, null));   // null: the dock was never edited, it is the first apps in home order
   var folders = L.folderList(read(K.folders, null)), hidden = L.hiddenList(read(K.hidden, null));
   var raw = L.expand(read(K.apps, []));
@@ -107,6 +134,7 @@
     } else if (b) {
       t.className += " brand"; t.style.background = b[0]; t.style.color = b[1]; t.textContent = b[2];
       if (b[3]) t.style.fontSize = b[3] + "px";
+      if (b[4]) t.style.boxShadow = "inset 0 0 0 3px " + b[4];
     } else {
       // Samsung's own icons are small and often blank on white: the icon small, the name under it.
       t.className += " plain";
@@ -142,38 +170,41 @@
 
   function setApps(list, fromTv) {
     raw = list;
-    var shown = list.filter(function (a) { return noLaunch.indexOf(a.id) < 0; });
-    var ordered = L.order(shown, recent), sig = L.signature(ordered);
+    var shown = blocked.length ? list.filter(function (a) { return blocked.indexOf(a.id) < 0; }) : list;
+    var ordered = L.order(shown, recent), sig = L.signature(ordered) + "\u0003" + blocked.join();
     if (fromTv) setStatus(ordered.length ? "" : S.noApps, true);
     if (sig === shownSig) return;
     shownSig = sig;
     var hadDock = dockCount() > 0;
     apps = ordered;
     relayout();
-    if (mode === "home") {
-      // The first list on an empty cache: focus goes to the first tile, as it would have from the cache.
-      if (!dockCount()) { focusChip(); showHero(null, true); }
-      else if (zone === "dock" || !hadDock) focusDock(Math.min(dockI, dockCount() - 1), true);
-    }
+    // The first list on an empty cache: focus goes to the first tile, as it would have from the cache.
+    if (mode === "home" && (!dockCount() || zone === "dock" || !hadDock)) refocusHome();
+    coachStart();
+  }
+  /** The home screen's focus after the dock changed: the same dock place (or the last), the chip when it is empty. */
+  function refocusHome() {
+    if (dockCount()) focusDock(Math.min(dockI, dockCount() - 1), true);
+    else { focusChip(); showHero(null, true); }
   }
 
   /** Items, grid and dock from the apps and the saved layout; the open grid or folder is redrawn. */
   function relayout() {
     items = L.layoutItems(apps, folders, hidden, lang);
-    var hid = L.hiddenApps(apps, hidden);
-    gl = hid.length ? items.concat([{ id: "hidden:", more: true, name: L.fmt(F.hiddenTile, hid.length) }]) : items;
-    docked = L.dockItems(items, saved);
+    var n = hiddenAll().length;
+    gl = n ? items.concat([{ id: "hidden:", more: true, name: L.fmt(F.hiddenTile, n) }]) : items;
+    docked = L.dockApps(items, saved);
     renderDock();
     layoutGen++;
     gridSig = null;
     if (mode === "all") { renderGrid(); focusGrid(Math.max(0, Math.min(gridI, gl.length - 1))); }
-    if (fold.on) refreshFold();
+    if (fold.state.on) fold.refresh();
   }
   /** The dock after an edit ([ids]: the dock as it is to be shown), saved at once. */
   function setDock(ids) {
     saved = ids;
     write(K.dock, ids);
-    docked = L.dockItems(items, saved);
+    docked = L.dockApps(items, saved);
     renderDock();
     markGrid();
   }
@@ -183,10 +214,7 @@
     saved = l.dock; folders = l.folders; hidden = l.hidden;
     write(K.dock, saved); write(K.folders, folders); write(K.hidden, hidden);
     relayout();
-    if (mode === "home") {
-      if (dockCount()) focusDock(Math.min(dockI, dockCount() - 1), true);
-      else { focusChip(); showHero(null, true); }
-    }
+    if (mode === "home") refocusHome();
   }
   function pin(a) {
     var ids = L.dockPin(dockList(), a.id);
@@ -198,10 +226,7 @@
   function unpin(a) {
     setDock(L.dockUnpin(dockList(), a.id));
     note(L.fmt(M.unpinned, a.name));
-    if (mode === "home") {
-      if (dockCount()) focusDock(Math.min(dockI, dockCount() - 1), true);
-      else { focusChip(); showHero(null, true); }
-    }
+    if (mode === "home") refocusHome();
   }
   /** One line for the person: under the title in «Все приложения» or a folder, else the status line. */
   var hintTimer = 0;
@@ -209,7 +234,7 @@
     if (mode === "folder") {
       foldHint.textContent = text;
       clearTimeout(hintTimer);
-      hintTimer = setTimeout(function () { foldHint.textContent = foldHintText(); }, 4000);
+      hintTimer = setTimeout(function () { foldHint.textContent = fold.hintText(); }, 4000);
       return;
     }
     if (mode !== "all") { setStatus(text); return; }
@@ -237,8 +262,9 @@
 
   function launch(a) {
     if (!a) return;
-    if (a.folder) { openFolder(a); return; }
-    if (a.more) { openHidden(); return; }
+    if (a.folder) { fold.open(a); return; }
+    if (a.more) { fold.openHidden(); return; }
+    coachDone();
     // Samsung's Settings open over ReTV: no return to watch, not a recent app.
     var overlay = L.overlayApp(a.id);
     // Sent before the launch: the page may be paused as soon as the app is in front. The service waits up to 20 s
@@ -246,15 +272,12 @@
     if (returnOn() && !overlay) svcCall("watchReturn", { appId: a.id }, 15000).then(null, quiet);
     function failed(e) {
       setStatus(L.fmt(S.openFailed, (e && e.message) || a.name));
-      // A Samsung app ReTV had not opened on a TV before: this TV does not let it, so it is not shown again.
-      if (L.untried(a.id) && noLaunch.indexOf(a.id) < 0) {
-        noLaunch.push(a.id);
-        write(K.noLaunch, noLaunch);
-        setApps(raw, false);
-      }
+      // A Samsung app that never opened on this TV: counted; the second failure hides it («Скрытые» brings it back).
+      setBook(L.bookFail(book, a.id));
     }
     try {
       tizen.application.launch(a.id, function () {
+        setBook(L.bookOk(book, a.id));
         if (overlay) return;
         lastOpened = a.id;
         recent = L.pushRecent(recent, a.id, 30);
@@ -280,7 +303,7 @@
     if (a.folder) {
       // A folder: up to 4 of its apps large, its name under them.
       for (var k = 0; k < a.apps.length && k < 4; k++) heroMinis.appendChild(mini(a.apps[k], "hm"));
-      heroArt.style.visibility = ""; heroArt.style.background = ""; heroArt.style.color = "";
+      heroArt.style.visibility = ""; heroArt.style.background = ""; heroArt.style.color = ""; heroArt.style.boxShadow = "";
       heroLabel.textContent = ""; heroIcon.style.backgroundImage = "none";
       heroName.textContent = a.name;
       return;
@@ -289,6 +312,7 @@
     heroArt.style.visibility = "";
     heroArt.style.background = b ? b[0] : "";
     heroArt.style.color = b ? b[1] : "";
+    heroArt.style.boxShadow = b && b[4] ? "inset 0 0 0 6px " + b[4] : "";
     heroLabel.textContent = b ? b[2] : "";
     heroIcon.style.backgroundImage = b ? "none" : cssUrl(a.iconPath);
     heroName.textContent = a.name;
@@ -296,33 +320,70 @@
 
   // --- Focus: one ring per surface, moved with a transform; the focused tile scales by a class ---
   function ringAt(ring, x, y) { ring.style.transform = "translate3d(" + x + "px," + y + "px,0) scale(1.1)"; }
+  // The home screen's places besides the dock: the top line (chip, the DNS card when it shows, the gear, as ReTV
+  // Home on Android: chip → banner → gear) and «Все приложения» under the dock.
+  var ZONES = { chip: chip, warn: warn, gear: gear, allBtn: allBtn };
+  function unfocusHome() {
+    var t = dock.children[dockI];
+    if (t && t !== dockRing) t.classList.remove("f");
+    for (var z in ZONES) ZONES[z].classList.remove("f");
+  }
   function focusDock(i, now) {
+    unfocusHome();
     var tiles = dock.children;
-    if (tiles[dockI]) tiles[dockI].classList.remove("f");
-    chip.classList.remove("f");
-    allBtn.classList.remove("f");
     zone = "dock"; dockI = i;
     if (tiles[i]) tiles[i].classList.add("f");
     dockRing.style.visibility = "";
     ringAt(dockRing, INSET + i * PITCH, PAD_V);
     showHero(docked[i], now);
+    if (coachOn) coachAt(i);
   }
-  function focusChip() {
-    var t = dock.children[dockI];
-    if (t && t !== dockRing) t.classList.remove("f");
-    allBtn.classList.remove("f");
-    zone = "chip";
+  function focusZone(z) {
+    unfocusHome();
+    zone = z;
     dockRing.style.visibility = "hidden";
-    chip.classList.add("f");
+    ZONES[z].classList.add("f");
   }
+  function focusChip() { focusZone("chip"); }
   /** «Все приложения ▼» under the dock: a button of its own, so the list can be found by moving down. */
-  function focusAllBtn() {
-    var t = dock.children[dockI];
-    if (t && t !== dockRing) t.classList.remove("f");
-    chip.classList.remove("f");
-    zone = "allBtn";
-    dockRing.style.visibility = "hidden";
-    allBtn.classList.add("f");
+  function focusAllBtn() { focusZone("allBtn"); }
+  /** The top line from left to right, the DNS card only while it shows. */
+  function topLine() { return warnOn ? ["chip", "warn", "gear"] : ["chip", "gear"]; }
+  function stepTop(delta) {
+    var line = topLine(), i = line.indexOf(zone) + delta;
+    if (i >= 0 && i < line.length) focusZone(line[i]);
+  }
+
+  // «Верните DNS на автоматический» on the home screen too (dns.js decides when): one press opens the steps.
+  var warnOn = false;
+  function showWarn() {
+    var on = dns.revertNow();
+    if (on === warnOn) return;
+    warnOn = on;
+    warn.style.visibility = on ? "" : "hidden";
+    if (!on && zone === "warn" && mode === "home") focusChip();
+  }
+
+  // The coach mark over the focused dock tile at the first start: «Удерживайте OK на приложении: меню». It goes for
+  // good when the app menu opens, an app opens, or after COACH_MS; never shown to someone who has used the menu.
+  var coachOn = false, coachChecked = false, coachTimer = 0;
+  function coachAt(i) { coachEl.style.transform = "translate3d(" + (parseFloat(dock.style.left) + INSET + i * PITCH + TW / 2) + "px,0,0) translateX(-50%)"; }
+  /** Once per start, as soon as the dock has tiles (from the cache, or the TV's first list on an empty cache). */
+  function coachStart() {
+    if (coachChecked || mode !== "home" || !dockCount()) return;
+    coachChecked = true;
+    if (read(K.coach, false) || menuUses > 0) return;
+    coachOn = true;
+    coachEl.style.visibility = "";
+    coachAt(zone === "dock" ? dockI : 0);
+    coachTimer = setTimeout(coachDone, L.COACH_MS);
+  }
+  function coachDone() {
+    if (!coachOn) return;
+    coachOn = false;
+    clearTimeout(coachTimer);
+    coachEl.style.visibility = "hidden";
+    write(K.coach, true);
   }
 
   // Moving a dock tile («Переместить»): ← → swap it with its neighbour, OK or Back ends; the ring turns blue.
@@ -407,10 +468,7 @@
     setEditing(false);
     all.classList.remove("on");
     // The dock may have changed meanwhile.
-    if (zone === "allBtn") return;
-    if (zone !== "dock") return;
-    if (dockCount()) focusDock(Math.min(dockI, dockCount() - 1), true);
-    else { focusChip(); showHero(null, true); }
+    if (zone === "dock") refocusHome();
   }
   function gridOk() {
     var a = gl[gridI];
@@ -419,61 +477,21 @@
     if (inDock(a.id)) unpin(a); else pin(a);
   }
 
-  // --- An open folder, or «Скрытые приложения» (OK shows a hidden app again): a layer with its own grid ---
-  var fold = { on: false, id: null, list: [], i: 0, back: "home" };
-  var FCOLS = 8;
-  function foldHintText() { return fold.id === "hidden:" ? F.hiddenHint : F.hint; }
-  function showFold() {
-    var f = document.createDocumentFragment();
-    for (var i = 0; i < fold.list.length; i++) f.appendChild(tile(fold.list[i], (i % FCOLS) * GX, Math.floor(i / FCOLS) * GY));
-    clearTiles(foldGrid, foldRing);
-    foldGrid.insertBefore(f, foldRing);
-    foldHint.textContent = foldHintText();
-    focusFold(Math.max(0, Math.min(fold.i, fold.list.length - 1)));
-  }
-  function focusFold(i) {
-    var tiles = foldGrid.children;
-    if (tiles[fold.i] && tiles[fold.i] !== foldRing) tiles[fold.i].classList.remove("f");
-    fold.i = i;
-    if (tiles[i] && tiles[i] !== foldRing) tiles[i].classList.add("f");
-    ringAt(foldRing, (i % FCOLS) * GX, Math.floor(i / FCOLS) * GY);
-  }
-  function openFold(id, title, list) {
-    fold.on = true; fold.id = id; fold.list = list; fold.i = 0;
-    fold.back = mode === "menu" ? menu.back : mode;
-    $("foldTitle").textContent = title;
-    mode = "folder";
-    showFold();
-    foldEl.classList.add("on");
-  }
-  function openFolder(item) { openFold(item.id, item.name, item.apps); }
-  function openHidden() { openFold("hidden:", F.hiddenTitle, L.hiddenApps(apps, hidden)); }
-  /** After an edit: the folder's apps again; a folder that is gone, or an empty hidden list, closes. */
-  function refreshFold() {
-    var list = null, title = $("foldTitle").textContent;
-    if (fold.id === "hidden:") list = L.hiddenApps(apps, hidden);
-    else for (var i = 0; i < items.length; i++) if (items[i].id === fold.id) { list = items[i].apps; title = items[i].name; }
-    if (!list || !list.length) { closeFold(); return; }
-    fold.list = list;
-    $("foldTitle").textContent = title;
-    showFold();
-  }
-  function closeFold() {
-    if (!fold.on) return;
-    fold.on = false;
-    foldEl.classList.remove("on");
-    if (mode === "folder") mode = fold.back;
-    else if (mode === "menu" && menu.back === "folder") menu.back = fold.back;
-    if (mode === "all") { renderGrid(); focusGrid(Math.max(0, Math.min(gridI, gl.length - 1))); }
-  }
-  function foldOk() {
-    var a = fold.list[fold.i];
-    if (!a) return;
-    if (fold.id !== "hidden:") { launch(a); return; }
-    setLayout(L.unhideApp(layoutNow(), a.id));
-    note(L.fmt(M.unhidden, a.name));
-  }
-
+  // --- An open folder, or «Скрытые приложения» (folders.js) ---
+  var fold = window.RetvFolders({
+    $: $, F: F, tile: tile, clearTiles: clearTiles, ringAt: ringAt, GX: GX, GY: GY,
+    mode: function () { return mode; }, setMode: function (m) { mode = m; },
+    menuBack: function () { return menu.back; }, setMenuBack: function (m) { menu.back = m; },
+    items: function () { return items; }, hiddenAll: hiddenAll, launch: launch,
+    openMenu: function (a, from) { openMenu(a, from); }, openPanel: function () { openPanel(); },
+    // OK in «Скрытые»: the app is back on the home screen; one this TV would not open gets another try.
+    unhide: function (a) {
+      if (a.blocked) setBook(L.bookForgive(book, a.id));
+      else setLayout(L.unhideApp(layoutNow(), a.id));
+      note(L.fmt(M.unhidden, a.name));
+    },
+    afterClose: function () { if (mode === "all") { renderGrid(); focusGrid(Math.max(0, Math.min(gridI, gl.length - 1))); } }
+  });
   // --- The app menu: OK held on a tile (or the remote's Tools key), as ReTV Home on Android ---
   var menu = { app: null, from: "dock", back: "home", items: [], i: 0, top: 0 };
   var HINTS = { move: M.moveHint, unpin: M.unpinHint, edit: M.editDockHint, hide: M.hideHint, dissolve: M.dissolveHint };
@@ -498,6 +516,7 @@
   }
   function openMenu(a, from) {
     if (!a || a.more) return;
+    coachDone();
     menu.app = a; menu.from = from; menu.back = mode;
     var keys = L.menuKeys(from, inDock(a.id), dockCount(), !!a.folder);
     showMenu(a.name, keys.map(function (key) {
@@ -680,7 +699,7 @@
     accountChanged();
   }
   function saveAcct() { write(K.token, acct.token); write(K.cell, acct.cell); write(K.ent, acct.ent); write(K.label, acct.label); write(K.dns, acct.dns); }
-  function forget() { acct = { token: null, cell: null, ent: null, label: null, dns: null }; saveAcct(); write(K.dnsAt, null); write(K.dnsLast, null); dnsLast = null; accountChanged(); }
+  function forget() { acct = { token: null, cell: null, ent: null, label: null, dns: null }; saveAcct(); dns.forgotten(); accountChanged(); }
 
   /** A fresh entitlement when the token is due (past `rfa`) or [force]d; at most once a minute. */
   function refresh(force) {
@@ -700,7 +719,7 @@
         acct.dns = n && typeof n === "object" && typeof n.host === "string" ? { host: n.host, on: n.on === true, proEnded: n.proEnded === true } : null;
         saveAcct();
         accountChanged();
-        dnsReport(false);
+        dns.report(false);
       } else if (st === 401 && d && d.error === "revoked") forget();
     });
   }
@@ -714,20 +733,21 @@
     chipPro.style.display = plan() === "free" ? "none" : "";
     if (mode === "panel") renderPanel();
     if (mode === "opt") optAccountChanged();
+    showWarn();
   }
 
   // --- Settings panel ---
-  var items = [], itemI = 0;
+  var rows = [], itemI = 0;   // the panel's rows (not the layout's items)
   function item(title, sub, act) {
     var e = el("div", "item");
     e.appendChild(el("b", "", title));
     if (sub) e.appendChild(el("span", "", sub));
-    items.push({ el: e, act: act });
+    rows.push({ el: e, act: act });
     return e;
   }
   function renderPanel() {
     var f = document.createDocumentFragment(), site = L.SITES[sign ? sign.cell : L.marketOf(navigator.language, timeZone())].replace(/^https:\/\//, "") + "/go";
-    items = [];
+    rows = [];
     var acc = el("div", "acc");
     if (acct.token) {
       acc.appendChild(el("b", "", L.fmt(S.account, L.labelText(acct.label, lang) || "ReTV")));
@@ -762,15 +782,15 @@
     f.appendChild(el("p", "ver", L.fmt(S.version, VERSION) + " · " + device().model));
     panelBody.textContent = "";
     panelBody.appendChild(f);
-    focusItem(Math.min(itemI, items.length - 1));
+    focusItem(Math.min(itemI, rows.length - 1));
   }
   function focusItem(i) {
-    if (items[itemI]) items[itemI].el.classList.remove("f");
+    if (rows[itemI]) rows[itemI].el.classList.remove("f");
     itemI = Math.max(0, i);
-    if (items[itemI]) items[itemI].el.classList.add("f");
+    if (rows[itemI]) rows[itemI].el.classList.add("f");
   }
   function openPanel() {
-    if (mode === "folder") closeFold();
+    if (mode === "folder") fold.close();
     if (mode === "all") closeAll();
     mode = "panel";
     itemI = 0;
@@ -816,10 +836,10 @@
   // --- «Ускорить и очистить ТВ»: a full-screen layer with three cards; OK on a card opens its page ---
   var PRIVACY_APP = "tv6pbVMQFF.PrivacyChoices", PAGE_H = 840, VIEWS = ["privacy", "apps", "dns"];
   var optEl = $("opt"), optCards = $("optCards"), optPage = $("optPage"), optIn = $("optIn");
-  var opt = { view: "cards", card: 0, items: [], i: 0, top: 0, busy: false, gen: 0, panelI: 0, calmUntil: 0 };
+  // home: the DNS page was opened from the home screen's card, so Back goes home.
+  var opt = { view: "cards", card: 0, items: [], i: 0, top: 0, busy: false, gen: 0, panelI: 0, calmUntil: 0, home: false };
   var pv = { step: "intro", lat: null, error: "" };                 // privacy page
   var av = { step: "idle", rows: [], guide: null, error: "", progress: "", result: null, btn: null }; // apps page
-  var dv = { step: "idle" };                                         // DNS page: a link request under way or not
   var beforeN = read(K.before, null);                               // how many apps the «как было» list holds
   $("optTitle").textContent = O.title;
 
@@ -847,8 +867,7 @@
       return out;
     }
     if (k === 1) return typeof beforeN === "number" ? [O.appsSub, L.fmt(O.beforeSaved, L.appsText(beforeN, lang))] : [O.appsSub];
-    var v = L.dnsView(plan(), acct.dns);
-    return [v === "pro" || v === "proEnded" ? O.dnsPro : O.dnsCardOn];
+    return [dns.cardLine()];
   }
   function renderCards() {
     var f = document.createDocumentFragment();
@@ -880,7 +899,7 @@
     opt.items = [];
     var f = document.createDocumentFragment();
     f.appendChild(el("h3", "", titleOf(opt.view)));
-    if (opt.view === "privacy") privacyPage(f); else if (opt.view === "apps") appsPage(f); else dnsPage(f);
+    if (opt.view === "privacy") privacyPage(f); else if (opt.view === "apps") appsPage(f); else dns.page(f);
     optIn.textContent = "";
     optIn.appendChild(f);
     optCards.style.visibility = "hidden";
@@ -908,6 +927,7 @@
     opt.panelI = itemI;
     closePanel();
     mode = "opt";
+    opt.home = false;
     opt.view = "cards";
     renderOpt();
     optEl.classList.add("on");
@@ -924,11 +944,33 @@
     opt.i = 0;
     if (opt.view === "privacy") { pv = { step: "intro", lat: null, error: "" }; renderOpt(); }
     else if (opt.view === "apps") appsLoad();
-    else { dv = { step: "idle" }; renderOpt(); dnsMaybeLink(); refresh(true); }
+    else { dns.opened(); renderOpt(); dns.report(true); refresh(true); }
+  }
+  /** OK on the home screen's DNS card: the DNS page at once; Back there comes home. */
+  function openDnsFix() {
+    mode = "opt";
+    opt.home = true;
+    opt.gen++;
+    opt.view = "dns";
+    opt.i = 0;
+    dns.opened();
+    renderOpt();
+    optEl.classList.add("on");
+    refresh(true);
+  }
+  function closeOptHome() {
+    opt.gen++;
+    opt.home = false;
+    opt.view = "cards";
+    optEl.classList.remove("on");
+    mode = "home";
+    showWarn();
+    if (zone === "warn") { if (warnOn) focusZone("warn"); else focusChip(); }
   }
   function optBack() {
     if (opt.busy) return;
     if (opt.view === "apps" && av.step === "confirm") { av.step = "list"; opt.i = 0; renderOpt(); return; }
+    if (opt.home) { closeOptHome(); return; }
     opt.gen++;
     if (pv.step === "waiting") pv.step = "intro";
     opt.view = "cards";
@@ -936,11 +978,11 @@
   }
   function optVisible() {
     if (pv.step === "waiting") privacyBack();
-    else if (opt.view === "cards") renderCards();
+    else if (opt.view === "cards" || opt.view === "dns") renderOpt();   // back from Samsung's Settings: DNS may be automatic now
   }
   function optAccountChanged() {
     if (opt.view === "cards") renderCards();
-    else if (opt.view === "dns") { renderOpt(); dnsMaybeLink(); }
+    else if (opt.view === "dns") { renderOpt(); dns.report(true); }
   }
 
   // Слежка и реклама: Samsung's own screen (the TV does not let apps press its keys); then the honest result.
@@ -1018,6 +1060,7 @@
     if (mode === "panel") { opt.panelI = itemI; closePanel(); }
     else if (mode !== "opt") opt.panelI = 0;
     mode = "opt";
+    opt.home = false;
     opt.gen++;
     opt.view = "privacy";
     opt.i = 0;
@@ -1144,6 +1187,7 @@
     if (st === "setup") {
       f.appendChild(el("p", "lead", av.guide.title));
       f.appendChild(el("p", "", av.guide.lead));
+      if (av.guide.alt) f.appendChild(el("p", "", av.guide.alt));
       f.appendChild(steps(av.guide.steps));
       f.appendChild(optItem(O.retry, "", appsLoad));
       f.appendChild(optItem(O.back, "", optBack));
@@ -1217,49 +1261,14 @@
     next();
   }
 
-  // DNS без рекламы (Pro): the TV links its home network, the person types the resolver's address on the TV.
-  // As ReTV Home on Android (DnsReportPolicy): the home network is linked on start and after refreshes while Pro and
-  // DNS are on, at most every 6 h (15 min between tries); opening the page links now unless a try was just made.
-  // The last answer is kept: { status: linked|notLinked|later, ip, servers }.
-  var dnsTriedAt = 0, dnsLast = read(K.dnsLast, null);
-  function dnsReport(force) {
-    if (!acct.token || L.dnsView(plan(), acct.dns) !== "ready") return;
-    var now = Date.now(), token = acct.token;
-    if (!L.dnsReportDue(true, now, read(K.dnsAt, null), dnsTriedAt, force)) return;
-    dnsTriedAt = now;
-    dv = { step: "linking" };
-    rerender("dns");
-    api(acct.cell, "/tv/dns", null, token, function (st, d) {
-      if (acct.token !== token) return;
-      if (st === 401 && d && d.error === "revoked") { forget(); return; }
-      var s = L.dnsLinkState(st, d), servers = d && Array.isArray(d.servers) ? d.servers : dnsLast && dnsLast.servers;
-      if (s === "linked") write(K.dnsAt, now);
-      dnsLast = { status: s, ip: (d && typeof d.ip === "string" && d.ip) || null, servers: servers || [] };
-      write(K.dnsLast, dnsLast);
-      dv = { step: "done" };
-      rerender("dns");
-    });
-  }
-  function dnsMaybeLink() { dnsReport(true); }
-  function dnsPage(f) {
-    var v = L.dnsView(plan(), acct.dns), site = siteOf(), cabinet = site + "/account/dns";
-    if (v === "pro") {
-      f.appendChild(el("p", "lead", O.dnsPro));
-      f.appendChild(el("p", "", L.fmt(O.dnsProHow, site)));
-    } else if (v === "proEnded") f.appendChild(el("p", "lead", L.fmt(O.dnsProEnded, site)));
-    else if (v === "turnOn") f.appendChild(el("p", "lead", L.fmt(O.dnsTurnOn, cabinet)));
-    else {
-      var last = dnsLast, server = L.dnsServer(last && last.servers);
-      f.appendChild(el("p", "lead", O.dnsLead));
-      if (server) f.appendChild(el("div", "code", server));
-      f.appendChild(steps([O.dnsSteps[0], O.dnsSteps[1], L.fmt(O.dnsSteps[2], server || L.fmt(O.dnsSite, cabinet))]));
-      var msg = dv.step === "linking" || !last ? O.dnsLinking
-        : last.status === "linked" ? L.fmt(O.dnsLinked, last.ip) : last.status === "later" ? O.dnsLater : O.dnsNotLinked;
-      f.appendChild(el("p", "msg", msg));
-    }
-    f.appendChild(optItem(O.back, "", optBack));
-  }
-
+  // --- «DNS без рекламы» (dns.js); the service keeps the home network linked, the page asks it every minute ---
+  var dns = window.RetvDns({
+    L: L, O: O, K: K, read: read, write: write, el: el, api: api, steps: steps, optItem: optItem, optBack: optBack, siteOf: siteOf,
+    acct: function () { return acct; }, plan: plan, forget: function () { forget(); }, svcCall: svcCall, rerender: rerender,
+    openSettings: hasTizen ? function () { launch({ id: L.SETTINGS_ID, name: S.samsungSettings }); } : null,
+    changed: function () { showWarn(); if (mode === "opt" && opt.view === "cards") renderCards(); }
+  });
+  setInterval(function () { dns.report(false); }, 60000);
   function keyOpt(k, repeat) {
     if (opt.view === "cards") {
       if (k === LEFT) { if (opt.card > 0) focusCard(opt.card - 1); }
@@ -1292,10 +1301,13 @@
       return;
     }
     if (k === RED) { openPanel(); return; }
-    if (zone === "chip") {
-      if (k === OK) openPanel();
-      else if (k === DOWN) { if (dockCount()) focusDock(dockI); else focusAllBtn(); }
-      else if (k !== BACK && k !== ESC && k !== UP && k !== LEFT && k !== RIGHT) return false;
+    if (zone === "chip" || zone === "warn" || zone === "gear") {
+      // The top line: the chip and the gear open Settings, the DNS card its steps.
+      if (k === OK) { if (zone === "warn") openDnsFix(); else openPanel(); }
+      else if (k === LEFT) stepTop(-1);
+      else if (k === RIGHT) stepTop(1);
+      else if (k === DOWN) { if (dockCount()) focusDock(Math.min(dockI, dockCount() - 1)); else focusAllBtn(); }
+      else if (k !== BACK && k !== ESC && k !== UP) return false;
       return;
     }
     if (zone === "allBtn") {
@@ -1333,18 +1345,8 @@
     else if (k === RED) openPanel();
     else return false;
   }
-  function keyFold(k) {
-    var n = fold.list.length, i = fold.i;
-    if (k === LEFT) { if (i % FCOLS) focusFold(i - 1); }
-    else if (k === RIGHT) { if (i % FCOLS < FCOLS - 1 && i < n - 1) focusFold(i + 1); }
-    else if (k === UP) { if (i >= FCOLS) focusFold(i - FCOLS); }
-    else if (k === DOWN) { if (i + FCOLS < n) focusFold(i + FCOLS); }
-    else if (k === OK) foldOk();
-    else if (k === TOOLS) { if (fold.id !== "hidden:") openMenu(fold.list[i], "inFolder"); }
-    else if (k === BACK || k === ESC) closeFold();
-    else if (k === RED) openPanel();
-    else return false;
-  }
+  var KEYS = { LEFT: LEFT, UP: UP, RIGHT: RIGHT, DOWN: DOWN, OK: OK, BACK: BACK, ESC: ESC, RED: RED, TOOLS: TOOLS };
+  function keyFold(k) { return fold.key(k, KEYS); }
   function keyMenu(k, repeat) {
     if (k === UP) focusMenu(menu.i - 1);
     else if (k === DOWN) focusMenu(menu.i + 1);
@@ -1354,8 +1356,8 @@
   }
   function keyPanel(k) {
     if (k === UP) focusItem(itemI - 1);
-    else if (k === DOWN) focusItem(Math.min(items.length - 1, itemI + 1));
-    else if (k === OK) { if (items[itemI]) items[itemI].act(items[itemI].el); }
+    else if (k === DOWN) focusItem(Math.min(rows.length - 1, itemI + 1));
+    else if (k === OK) { if (rows[itemI]) rows[itemI].act(rows[itemI].el); }
     else if (k === BACK || k === ESC || k === LEFT || k === RED) closePanel();
     else if (k !== RIGHT) return false;
   }
@@ -1366,7 +1368,7 @@
   function holdTarget() {
     if (mode === "home" && zone === "dock" && !moving) return docked[dockI] ? { app: docked[dockI], from: "dock" } : null;
     if (mode === "all" && allZone === "grid") return gl[gridI] ? { app: gl[gridI], from: "all" } : null;
-    if (mode === "folder") return fold.list[fold.i] ? { app: fold.list[fold.i], from: fold.id === "hidden:" ? null : "inFolder" } : null;
+    if (mode === "folder") return fold.target();
     return null;
   }
   function okDown(e) {
@@ -1408,7 +1410,7 @@
     // Back from an app (or the Home key): the home screen, focus on the app just opened (first in a dock never edited).
     tick();
     if (mode === "menu") closeMenu();
-    if (mode === "folder") closeFold();
+    if (mode === "folder") fold.close();
     if (mode === "all") closeAll();
     if (mode === "opt") optVisible();
     if (moving) endMove();
@@ -1417,7 +1419,8 @@
     if (mode === "home" && dockCount()) focusDock(Math.max(0, dockIndexOf(lastOpened)));
     loadApps();
     refresh(false);
-    dnsReport(false);
+    dns.report(false);
+    showWarn();
     requestPoll();
     if (window.RETV_DEV_SINK) devPoll();
   });
@@ -1474,7 +1477,7 @@
       // Samsung's full webapis (productinfo, adinfo) come from the deferred $WEBAPIS script in index.html: the TV puts
       // a small built-in `webapis` (avplay and a few others) in every page, and the $WEBAPIS path only resolves in
       // the HTML the TV loads, not in a script added later (checked on the 2021 TV).
-      setTimeout(function () { refresh(false); dnsReport(false); }, 1500);
+      setTimeout(function () { refresh(false); dns.report(false); checkFirmware(); showWarn(); }, 1500);
       // The service is started a little later, so the return watch is ready when the first app opens; the cold start
       // itself does not wait for it.
       setTimeout(function () { if (returnOn()) service().then(function (s) { return s.connect(); }).then(null, quiet); }, 4000);

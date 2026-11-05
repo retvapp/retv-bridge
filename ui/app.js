@@ -622,9 +622,13 @@ function step2(v, tv, err, celebrate) {
     return { body, foot: waitFoot() };
   }
   if (tv.devMode && !tv.hostOk && tv.devIp) {
+    // 127.0.0.1 is what ReTV on the TV asks for to remove apps without a computer: say so, not «another computer».
+    const loop = tv.devIp === "127.0.0.1" || tv.devIp === "1.0.0.127";
     body.push(
       h("h2", {}, s("samsung.dev.other.title")),
-      banner("warn", s("samsung.dev.other.ban"), R("samsung.dev.other.text", { ip: tv.devIp })),
+      loop
+        ? banner("warn", s("samsung.dev.loop.ban"), R("samsung.dev.loop.text"))
+        : banner("warn", s("samsung.dev.other.ban"), R("samsung.dev.other.text", { ip: tv.devIp })),
       howto([{ text: R("samsung.dev.other.1") }, { text: R("samsung.dev.other.2"), now: true }]),
       box,
       howto([{ text: R("samsung.dev.other.3") }], 3),
@@ -636,7 +640,7 @@ function step2(v, tv, err, celebrate) {
         { text: R("samsung.dev.1") },
         { text: R("samsung.dev.2"), sub: R("samsung.dev.2sub") },
         { text: R("samsung.dev.3") },
-        { text: R("samsung.dev.4"), now: true },
+        { text: R("samsung.dev.4"), sub: R("samsung.dev.4sub"), now: true },
       ]),
       box,
       howto([{ text: R("samsung.dev.5") }], 5),

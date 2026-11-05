@@ -1299,6 +1299,216 @@ TvState.prototype.status = function (tizenId) {
 module.exports = { TvState: TvState, KNOWN: KNOWN };
 
 };
+defs["./dnsreport.js"] = function (module, exports, require) {
+// «DNS без рекламы» on Samsung: the home network is linked to the account from here, every 15 minutes, also while
+// ReTV Home is not on screen. Samsung has one DNS field, and our resolver answers an unlinked network with retv.app
+// only, so a network that drops out of the account (a new address from the provider) must be linked again soon.
+// The page hands over the account (dns.config: cell, device token, whether DNS is on) and asks for its reports
+// through dns.report, so the page and the service never report twice. The pace is the page's and ReTV Home's on
+// Android (DnsReportPolicy): every 15 min, never twice within 5 min; the server allows 12 an hour per TV.
+'use strict';
+var https = require('https');
+
+var SITES = { world: 'retv.app', ru: 'ru.retv.app' };   // logic.js SITES, the hosts only
+var EVERY_MS = 15 * 60000;
+var GAP_MS = 5 * 60000;
+var TICK_MS = 60000;
+var TOKEN = /^[A-Za-z0-9._~+\/=-]{16,1024}$/;
+
+// The TV's Node may be 4.4.3, whose roots predate Let's Encrypt's ISRG roots (retv.app's chain ends at ISRG Root
+// X1 through X2). When the TV's own roots refuse the chain, the request is made once more trusting only these two
+// (only our own hosts are asked).
+var ISRG_ROOTS = [
+  '-----BEGIN CERTIFICATE-----\n' +
+  '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\n' +
+  '-----END CERTIFICATE-----\n',
+  '-----BEGIN CERTIFICATE-----\n' +
+  'MIICGzCCAaGgAwIBAgIQQdKd0XLq7qeAwSxs6S+HUjAKBggqhkjOPQQDAzBPMQsw\n' +
+  'CQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJuZXQgU2VjdXJpdHkgUmVzZWFyY2gg\n' +
+  'R3JvdXAxFTATBgNVBAMTDElTUkcgUm9vdCBYMjAeFw0yMDA5MDQwMDAwMDBaFw00\n' +
+  'MDA5MTcxNjAwMDBaME8xCzAJBgNVBAYTAlVTMSkwJwYDVQQKEyBJbnRlcm5ldCBT\n' +
+  'ZWN1cml0eSBSZXNlYXJjaCBHcm91cDEVMBMGA1UEAxMMSVNSRyBSb290IFgyMHYw\n' +
+  'EAYHKoZIzj0CAQYFK4EEACIDYgAEzZvVn4CDCuwJSvMWSj5cz3es3mcFDR0HttwW\n' +
+  '+1qLFNvicWDEukWVEYmO6gbf9yoWHKS5xcUy4APgHoIYOIvXRdgKam7mAHf7AlF9\n' +
+  'ItgKbppbd9/w+kHsOdx1ymgHDB/qo0IwQDAOBgNVHQ8BAf8EBAMCAQYwDwYDVR0T\n' +
+  'AQH/BAUwAwEB/zAdBgNVHQ4EFgQUfEKWrt5LSDv6kviejM9ti6lyN5UwCgYIKoZI\n' +
+  'zj0EAwMDaAAwZQIwe3lORlCEwkSHRhtFcP9Ymd70/aTSVaYgLXTWNLxBo1BfASdW\n' +
+  'tL4ndQavEi51mI38AjEAi/V3bNTIZargCyzuFJ0nN6T5U6VR5CmD1/iQMVtCnwr1\n' +
+  '/q4AaOeMSQ+2b1tbFfLn\n' +
+  '-----END CERTIFICATE-----\n'
+];
+
+/** POST https://[host][path] with the bearer [token], no body -> Promise<{ status, body, error }> (0: no answer). */
+function post(host, path, token, timeoutMs) {
+  function once(ca) {
+    return new Promise(function (resolve) {
+      var done = false;
+      function fin(status, text, err) {
+        if (done) return;
+        done = true;
+        var body = null;
+        try { body = JSON.parse(text); } catch (e) {}
+        resolve({ status: status, body: body, error: err || null });
+      }
+      var o = {
+        hostname: host, port: 443, path: path, method: 'POST',
+        headers: { Authorization: 'Bearer ' + token, Accept: 'application/json', 'Content-Length': 0 }
+      };
+      if (ca) { o.ca = ca; o.agent = false; }
+      var req;
+      try {
+        req = https.request(o, function (res) {
+          var text = '';
+          res.setEncoding('utf8');
+          res.on('data', function (d) { if (text.length < 65536) text += d; });
+          res.on('end', function () { fin(res.statusCode, text); });
+          res.on('error', function (e) { fin(0, '', e); });
+        });
+      } catch (e) { fin(0, '', e); return; }
+      req.setTimeout(timeoutMs || 15000, function () { req.abort(); fin(0, '', new Error('timeout')); });
+      req.on('error', function (e) { fin(0, '', e); });
+      req.end();
+    });
+  }
+  return once(null).then(function (r) {
+    var code = r.error && String(r.error.code || r.error.message || '');
+    return code && /CERT|ISSUER|SIGNATURE|self signed/i.test(code) ? once(ISRG_ROOTS) : r;
+  });
+}
+
+/** What a `POST /v1/tv/dns` answer means: "linked", "later" (429) or "notLinked" (as logic.js dnsLinkState). */
+function linkState(status, d) {
+  if (status === 429) return 'later';
+  return status === 200 && d && d.on === true && typeof d.ip === 'string' && d.ip ? 'linked' : 'notLinked';
+}
+
+/** Whether a report is due (as logic.js dnsReportDue): [force] skips the 15 min, never the 5 min gap. */
+function due(now, lastOk, triedAt, force) {
+  if (triedAt && now >= triedAt && now - triedAt < GAP_MS) return false;
+  if (force) return true;
+  return typeof lastOk !== 'number' || now < lastOk || now - lastOk >= EVERY_MS;
+}
+
+/** DnsReport({ store, post?, now?, timers?: { setInterval, clearInterval }, log? }) */
+function DnsReport(opts) {
+  this.store = opts.store;
+  this.post = opts.post || post;
+  this.now = opts.now || function () { return Date.now(); };
+  this.timers = opts.timers || { setInterval: setInterval, clearInterval: clearInterval };
+  this.log = opts.log || function () {};
+  this.triedAt = 0;
+  this.pending = null;
+  this.timer = null;
+  this.revoked = false;
+}
+
+DnsReport.prototype._get = function () {
+  var d = this.store.get('dns');
+  return d && typeof d === 'object' && d.token ? d : null;
+};
+
+/** Starts the 15 min round when an account is set up (the service's start). */
+DnsReport.prototype.start = function () {
+  var self = this;
+  if (this.timer || !this._get()) return;
+  this.timer = this.timers.setInterval(function () { self.report(false).then(null, function () {}); }, TICK_MS);
+};
+DnsReport.prototype.stop = function () {
+  if (this.timer) this.timers.clearInterval(this.timer);
+  this.timer = null;
+};
+
+/** dns.config { cell, token, on }: the page's account; no token forgets it (signed out). */
+DnsReport.prototype.config = function (a) {
+  a = a || {};
+  if (!a.token) {
+    this.store.set('dns', undefined);
+    this.stop();
+    return this.status();
+  }
+  if (!Object.prototype.hasOwnProperty.call(SITES, a.cell) || typeof a.token !== 'string' || !TOKEN.test(a.token)) {
+    var e = new Error('dns.config: { cell: world|ru, token, on }'); e.code = 'BAD_ARGS'; throw e;
+  }
+  var prev = this._get() || {}, same = prev.token === a.token && prev.cell === a.cell;
+  this.revoked = false;
+  this.store.set('dns', { cell: a.cell, token: a.token, on: a.on === true, lastOk: same ? prev.lastOk || null : null, last: same ? prev.last || null : null });
+  this.start();
+  return this.status();
+};
+
+/** dns.report { force }: a report now when due (or [force]d, still not within 5 min of the last try). */
+DnsReport.prototype.report = function (force) {
+  var self = this, d = this._get();
+  if (!d || !d.on || this.pending) return this.pending || Promise.resolve(this.status());
+  var now = this.now();
+  if (!due(now, d.lastOk, this.triedAt, force)) return Promise.resolve(this.status());
+  this.triedAt = now;
+  var token = d.token;
+  this.pending = this.post(SITES[d.cell], '/v1/tv/dns', token, 15000).then(function (r) {
+    self.pending = null;
+    var cur = self._get();
+    if (!cur || cur.token !== token) return self.status();
+    var b = r.body;
+    if (r.status === 401 && b && b.error === 'revoked') {
+      self.store.set('dns', undefined);
+      self.revoked = true;
+      self.stop();
+      self.log('dns: the TV was signed out on the server');
+      return self.status();
+    }
+    var st = linkState(r.status, b);
+    var servers = b && Array.isArray(b.servers) ? b.servers.slice(0, 8) : (cur.last && cur.last.servers) || [];
+    if (st === 'linked') cur.lastOk = now;
+    // DNS off on the server (Pro ended, switched off in the cabinet): no more reports until the page says on again.
+    if (r.status === 200 && b && b.on === false) cur.on = false;
+    cur.last = { status: st, ip: (b && typeof b.ip === 'string' && b.ip) || null, servers: servers, on: b && typeof b.on === 'boolean' ? b.on : null, at: now };
+    self.store.set('dns', cur);
+    self.log('dns: ' + st + (r.status ? ' (' + r.status + ')' : r.error ? ' (' + (r.error.code || r.error.message) + ')' : ''));
+    return self.status();
+  }, function (e) { self.pending = null; throw e; });
+  return this.pending;
+};
+
+/** { configured, on, lastOk, triedAt, last: { status, ip, servers, on, at } | null, revoked } (never the token). */
+DnsReport.prototype.status = function () {
+  var d = this._get();
+  return {
+    configured: !!d, on: !!(d && d.on), lastOk: (d && d.lastOk) || null, triedAt: this.triedAt || null,
+    last: (d && d.last) || null, revoked: this.revoked
+  };
+};
+
+module.exports = { DnsReport: DnsReport, post: post, linkState: linkState, due: due, SITES: SITES, EVERY_MS: EVERY_MS, GAP_MS: GAP_MS, TICK_MS: TICK_MS };
+
+};
 defs["./auth.js"] = function (module, exports, require) {
 // Who may talk to the service. Every other app (and any web page) on the TV can open 127.0.0.1:8095, so:
 //  1. a per-install secret: made on first start, kept in the service's private data folder, and handed out
@@ -1547,6 +1757,7 @@ var privacyMod = require('./privacy.js');
 var relayMod = require('./relay.js');
 var returnMod = require('./returnwatch.js');
 var tvstateMod = require('./tvstate.js');
+var dnsMod = require('./dnsreport.js');
 var rpc = require('./rpc.js');
 var server = require('./server.js');
 var auth = require('./auth.js');
@@ -1564,7 +1775,7 @@ function packageId() {
 /**
  * createService(opts) wires the modules; every outside dependency can be replaced for tests:
  * { store, tizen, sdbRun, getJson, remoteOpen, remoteUrl, wait, rpcPort, sdbPort, log, tvState, launchHome,
- *   privacyTimings, returnTimers }
+ *   privacyTimings, returnTimers, dnsPost, dnsTimers, now }
  */
 function createService(opts) {
   opts = opts || {};
@@ -1622,6 +1833,9 @@ function createService(opts) {
       return new Promise(function (resolve, reject) { tz.application.launch(returnMod.HOME, resolve, reject); });
     }
   });
+
+  // «DNS без рекламы»: the home network stays linked while ReTV Home is not on screen (dnsreport.js).
+  var dns = new dnsMod.DnsReport({ store: store, post: opts.dnsPost, timers: opts.dnsTimers, now: opts.now, log: log });
 
   function relaySettings() {
     var s = store.get('relay') || {};
@@ -1691,6 +1905,10 @@ function createService(opts) {
         return { running: running, lists: returnWatch.lists(), status: returnWatch.status(), ticks: returnWatch.history() };
       });
     },
+    // The page's account for the DNS reports, and a report (when due, or forced but not within 5 min of the last).
+    'dns.config': function (a) { return dns.config(a); },
+    'dns.report': function (a) { return dns.report(!!(a && a.force)); },
+    'dns.status': function () { return dns.status(); },
     'log.tail': function () { return logs.slice(-100); }
   };
   var getSecret = function () { return auth.secret(store); };
@@ -1698,7 +1916,7 @@ function createService(opts) {
 
   var http = null;
   return {
-    hub: hub, store: store, relay: relay, returnWatch: returnWatch,
+    hub: hub, store: store, relay: relay, returnWatch: returnWatch, dns: dns,
     start: function () {
       if (http) return Promise.resolve(http);
       var port = opts.rpcPort === undefined ? RPC_PORT : opts.rpcPort;
@@ -1708,11 +1926,14 @@ function createService(opts) {
       return http.then(function (s) {
         log('ReTV service ' + VERSION + ' on 127.0.0.1:' + s.address().port + ', node ' + process.version);
         applyRelay();
+        dns.start();
+        dns.report(false).then(null, function () {});
         return s;
       }, function (e) { http = null; log('cannot listen: ' + e.message); throw e; });
     },
     stop: function () {
       relay.stop();
+      dns.stop();
       returnWatch._stop('STOPPED');
       if (http) http.then(function (s) { s.close(); });
       http = null;

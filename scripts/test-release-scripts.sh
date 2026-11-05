@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests for the release helpers (release-version.sh, mac-finish.sh).
+# Tests for the release helpers (release-version.sh, mac-finish.sh, win-route.sh).
 # Apple's tools are faked through PATH shims, so this runs on any OS:
 #   bash scripts/test-release-scripts.sh
 set -uo pipefail
@@ -442,6 +442,28 @@ if command -v node >/dev/null; then
 else
   echo "skip win-sign-hook.mjs (no node on PATH)"
 fi
+
+# --- win-route.sh ------------------------------------------------------------
+# route_case <name> <expected route, or "fail"> <file text, or "none"> [SIGNPATH_ORGANIZATION_ID]
+route_case() {
+  local name="$1" want="$2" text="$3" org="${4:-}" file="$TMP/win-route-$RANDOM$RANDOM" got status=0
+  [ "$text" = none ] || printf '%b' "$text" > "$file"
+  got="$(env -i PATH="$PATH" SIGNPATH_ORGANIZATION_ID="$org" bash "$HERE/win-route.sh" "$file" 2>"$TMP/route-err")" || status=$?
+  if [ "$want" = fail ]; then
+    if [ "$status" -ne 0 ] && [ -z "$got" ]; then ok "$name"; else bad "$name" "$TMP/route-err"; fi
+  elif [ "$status" -eq 0 ] && [ "$got" = "$want" ]; then ok "$name"; else bad "$name" "$TMP/route-err"; fi
+}
+route_case "win-route: UNSIGNED, no variable" UNSIGNED 'UNSIGNED\n'
+route_case "win-route: comments and spaces are fine" UNSIGNED '# no signature\n  UNSIGNED  \n'
+route_case "win-route: SIGNPATH with the variable" SIGNPATH 'SIGNPATH\n' org-id
+route_case "win-route: UNSIGNED refuses a set variable" fail 'UNSIGNED\n' org-id
+route_case "win-route: SIGNPATH refuses no variable" fail 'SIGNPATH\n'
+route_case "win-route: another word is refused" fail 'unsigned\n'
+route_case "win-route: an empty file is refused" fail '# nothing\n'
+route_case "win-route: no file is refused" fail none
+got_route="$(env -i PATH="$PATH" bash "$HERE/win-route.sh")"
+[ "$got_route" = UNSIGNED ] && ok "win-route: the committed file says UNSIGNED" || bad "win-route: the committed file says UNSIGNED"
+[ -x "$HERE/win-route.sh" ] && ok "win-route: executable, the workflow runs it directly" || bad "win-route: executable, the workflow runs it directly"
 
 echo
 echo "$GOOD passed, $FAILED failed"

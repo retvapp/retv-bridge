@@ -47,8 +47,16 @@ fn main() {
             let apps = manifest.ancestors().nth(3).unwrap_or(&manifest);
             let mono = apps.join("retv-tizen");
             // In the public repo (scripts/publish-retv-bridge.sh): vendor/retv-tizen at its root.
-            let vendor = manifest.ancestors().nth(2).unwrap_or(&manifest).join("vendor/retv-tizen");
-            if mono.join("config.xml").is_file() { mono } else { vendor }
+            let vendor = manifest
+                .ancestors()
+                .nth(2)
+                .unwrap_or(&manifest)
+                .join("vendor/retv-tizen");
+            if mono.join("config.xml").is_file() {
+                mono
+            } else {
+                vendor
+            }
         });
     println!("cargo:rerun-if-changed={}", dir.display());
     let mut files = Vec::new();

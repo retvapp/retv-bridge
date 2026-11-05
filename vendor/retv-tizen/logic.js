@@ -21,9 +21,10 @@
     "org.tizen.emanual-app": "e-Manual",
     "org.tizen.menu": "@samsungSettings"
   };
-  // One whose launch fails is hidden on that TV from then on (main.js, retv.noLaunch). Checked on the 2021 TV
-  // (2026-11-04): Apps, Live TV and Ambient Mode open; TV Plus fails there. SmartThings reports success but shows
-  // nothing (it is a background part), so it is not offered at all.
+  // Not every TV lets a web app open these: one that never opened on this TV and failed twice is hidden there
+  // (main.js, retv.noLaunch: launchBook below). Checked on the 2021 TV (2026-11-04): Apps, Live TV and Ambient Mode
+  // open; TV Plus fails there. SmartThings reports success but shows nothing (it is a background part), so it is
+  // not offered at all.
   var UNTRIED = {
     "com.samsung.tv.store": 1, "com.samsung.tv.tvplus": 1, "org.tizen.tv-viewer": 1,
     "org.tizen.ambientapp": 1, "org.tizen.emanual-app": 1, "org.tizen.menu": 1
@@ -60,10 +61,69 @@
   }
   function untried(id) { return has(UNTRIED, id); }
 
-  // Tiles drawn by ReTV: [background, text colour, label (null: the app's name), font px (0: the usual 24)]. Flat
-  // fills only: a gradient on a tile repaints on every key press on the 2021 TV.
+  // --- Samsung apps this TV will not open (retv.noLaunch: { fw, ver, fails: { id: n }, ok: [ids] }) ---
+  // One failure is not enough (a busy TV refuses now and then), and an app that opened once is never hidden. A new
+  // firmware or a new ReTV Home starts the book afresh: what failed may open now.
+  var NO_LAUNCH_FAILS = 2;
+  /** The saved book, cleaned; empty when [fw] (null: not known yet) or [ver] differ from what it was written with. */
+  function launchBook(v, fw, ver) {
+    var b = { fw: fw || null, ver: ver || null, fails: {}, ok: [] }, i;
+    if (Array.isArray(v)) {
+      // The list before 0.2.1: hidden after one failure. Each counts as one failure now.
+      for (i = 0; i < v.length; i++) if (typeof v[i] === "string" && untried(v[i])) b.fails[v[i]] = 1;
+      return b;
+    }
+    if (!v || typeof v !== "object") return b;
+    if (ver && v.ver !== ver) return b;
+    if (fw && typeof v.fw === "string" && v.fw && v.fw !== fw) return b;
+    if (!b.fw && typeof v.fw === "string" && v.fw) b.fw = v.fw;
+    if (v.fails && typeof v.fails === "object") {
+      for (var k in v.fails) {
+        if (has(v.fails, k) && untried(k) && typeof v.fails[k] === "number" && v.fails[k] > 0) b.fails[k] = Math.min(99, Math.floor(v.fails[k]));
+      }
+    }
+    if (Array.isArray(v.ok)) for (i = 0; i < v.ok.length; i++) if (typeof v.ok[i] === "string" && untried(v.ok[i]) && b.ok.indexOf(v.ok[i]) < 0) b.ok.push(v.ok[i]);
+    return b;
+  }
+  function copyBook(b) {
+    var c = { fw: b.fw, ver: b.ver, fails: {}, ok: b.ok.slice() };
+    for (var k in b.fails) if (has(b.fails, k)) c.fails[k] = b.fails[k];
+    return c;
+  }
+  /** The book after a failed launch of [id] (only the Samsung apps above are counted; one that opened once never). */
+  function bookFail(b, id) {
+    if (!untried(id) || b.ok.indexOf(id) >= 0) return b;
+    var c = copyBook(b);
+    c.fails[id] = (c.fails[id] || 0) + 1;
+    return c;
+  }
+  /** The book after [id] opened: never hidden from then on. */
+  function bookOk(b, id) {
+    if (!untried(id) || (b.ok.indexOf(id) >= 0 && !has(b.fails, id))) return b;
+    var c = copyBook(b);
+    if (c.ok.indexOf(id) < 0) c.ok.push(id);
+    delete c.fails[id];
+    return c;
+  }
+  /** The book after the person brought [id] back from «Скрытые приложения»: its failures are forgotten. */
+  function bookForgive(b, id) {
+    if (!has(b.fails, id)) return b;
+    var c = copyBook(b);
+    delete c.fails[id];
+    return c;
+  }
+  /** The ids hidden because this TV will not open them. */
+  function blockedIds(b) {
+    var out = [];
+    for (var k in b.fails) if (has(b.fails, k) && b.fails[k] >= NO_LAUNCH_FAILS && b.ok.indexOf(k) < 0) out.push(k);
+    return out;
+  }
+
+  // Tiles drawn by ReTV: [background, text colour, label (null: the app's name), font px (0: the usual 24), edge]. Flat
+  // fills only: a gradient on a tile repaints on every key press on the 2021 TV. A light tile has a coloured edge (a
+  // flat inset line): plain white reads as a blank block on camera and melts into the white focus ring.
   var BRAND = {
-    "9Ur5IzDKqV.TizenYouTube": ["#ffffff", "#ff0033", "YouTube", 0],
+    "9Ur5IzDKqV.TizenYouTube": ["#ffffff", "#ff0033", "YouTube", 0, "#ff8099"],
     "org.tizen.netflix-app": ["#000000", "#e50914", "NETFLIX", 0],
     "org.tizen.primevideo": ["#0f79af", "#ffffff", "prime video", 0],
     "vbUQClczfR.Wuakitv": ["#bf0000", "#ffffff", "Rakuten TV", 0],
@@ -71,15 +131,15 @@
     "org.tizen.tv-viewer": ["#2a3142", "#ffffff", null, 22],
     "com.samsung.tv.gallery": ["#7b5cff", "#ffffff", "Gallery", 0],
     "org.tizen.browser": ["#1e66d0", "#ffffff", "Internet", 0],
-    "com.samsung.tv.store": ["#ffffff", "#1428a0", "Apps", 0],
+    "com.samsung.tv.store": ["#ffffff", "#1428a0", "Apps", 0, "#7d8ce0"],
     "org.tizen.ambientapp": ["#3a3f4b", "#ffffff", "Ambient", 0],
     "org.tizen.emanual-app": ["#2f3542", "#ffffff", "e-Manual", 0],
-    "org.tizen.menu": ["#e8eaef", "#1d1d1f", null, 20]
+    "org.tizen.menu": ["#e8eaef", "#1d1d1f", null, 20, "#8d95a8"]
   };
-  /** [background, text colour, label, font px] for a drawn tile, or null (the TV's icon). */
+  /** [background, text colour, label, font px, edge colour or null] for a drawn tile, or null (the TV's icon). */
   function brandOf(a, lang) {
     var b = has(BRAND, a.id) ? BRAND[a.id] : null;
-    return b ? [b[0], b[1], b[2] || appName(a, lang), b[3]] : null;
+    return b ? [b[0], b[1], b[2] || appName(a, lang), b[3], b[4] || null] : null;
   }
   // Default order (after the apps opened from ReTV): the big video apps, well-known store apps, the other store apps,
   // then Samsung's own. On the 2021 TV the default dock stays what it was before Samsung's apps were added.
@@ -247,8 +307,6 @@
   function hiddenApps(apps, hidden) {
     return apps.filter(function (a) { return (hidden || []).indexOf(a.id) >= 0; });
   }
-  /** The dock's items (apps and folders) from [items] (layoutItems): the saved ids, or the first DOCK_MAX. */
-  function dockItems(items, saved) { return dockApps(items, saved); }
 
   // Edits of a layout { dock: [ids as shown], folders, hidden }; each returns a new layout.
   function copyLayout(l) {
@@ -264,15 +322,19 @@
     l.folders.forEach(function (f) { var n = parseInt(f.id.slice(FOLDER_PREFIX.length), 10); if (n > max) max = n; });
     return FOLDER_PREFIX + (max + 1);
   }
-  /** Folder [id] replaced by its apps: in the dock in its place (what does not fit stays in «Все приложения»). */
+  /**
+   * Folder [id] replaced by its apps: in the dock in its place, as many as fit. The person's own pins always stay;
+   * the folder's apps that do not fit stay in «Все приложения».
+   */
   function dissolveIn(l, id) {
     var f = folderById(l, id);
     if (!f) return l;
     l.folders = l.folders.filter(function (x) { return x !== f; });
     var i = l.dock.indexOf(id);
     if (i >= 0) {
-      var rest = f.apps.filter(function (a) { return l.dock.indexOf(a) < 0; });
-      l.dock = l.dock.slice(0, i).concat(rest, l.dock.slice(i + 1)).slice(0, DOCK_MAX);
+      var others = l.dock.slice(0, i).concat(l.dock.slice(i + 1));
+      var rest = f.apps.filter(function (a) { return others.indexOf(a) < 0; }).slice(0, Math.max(0, DOCK_MAX - others.length));
+      l.dock = l.dock.slice(0, i).concat(rest, l.dock.slice(i + 1));
     }
     return l;
   }
@@ -329,6 +391,8 @@
   var HINT_USES = 3;
   /** OK held this long opens the app menu (ReTV Home on Android: a long press). */
   var HOLD_MS = 600;
+  /** The first-start coach mark over the dock («Удерживайте OK на приложении: меню») goes after this long at most. */
+  var COACH_MS = 30000;
 
   // --- Market: which site this TV signs in to (RelaySite.kt) ---
   var SITES = { world: "https://retv.app", ru: "https://ru.retv.app" };
@@ -383,11 +447,13 @@
         rename: "Rename", dissolve: "Ungroup the folder", dissolveHint: "The apps stay",
         hidden: "Hidden: %s", folderNew: "New folder", folderPick: "Move to a folder", renameTitle: "Folder name",
         movedTo: "In the folder «%s»: %s", outOf: "Out of the folder: %s", unhidden: "Shown again: %s",
-        homeHint: "Hold OK on an app: its menu (folders, hide, move, dock)", allBtn: "All apps"
+        homeHint: "Hold OK on an app: its menu (folders, hide, move, dock)", allBtn: "All apps",
+        coach: "Hold OK on an app: menu"
       },
       folder: {
         defaultName: "Folder", hint: "Hold OK: menu · Back: close", hiddenTitle: "Hidden apps",
         hiddenHint: "OK shows the app again. Hidden only from the home screen: the apps stay on the TV.",
+        blockedHint: "OK shows the app again. Samsung apps that did not open on this TV twice are here too: ReTV hid them.",
         hiddenTile: "Hidden (%s)", n: ["%s app", "%s apps"],
         presets: { movies: "Movies and series", music: "Music", games: "Games", kids: "Kids", sports: "Sports", news: "News",
           tv: "TV channels", services: "Services", utilities: "Utilities", favourites: "Favourites" }
@@ -431,11 +497,18 @@
         dnsNotLinked: "Could not link this network: blocking works only in a linked home network. Try again later.",
         dnsLead: "Enter the DNS address in Samsung's network settings:",
         dnsSteps: ["Settings → General → Network → Network Status → IP Settings.", "DNS Settings: Enter manually.", "DNS Server: %s, then OK."],
+        dnsOneField: "Samsung has one DNS field, so ReTV Home keeps your home network linked by itself: on start and every 15 minutes. Until it is linked (for example right after your provider changes the address), only ReTV works on the TV.",
+        dnsRevertCard: "Set DNS back to automatic", dnsRevertHow: "OK: show how",
+        dnsRevertLead: "DNS without ads is off, but the TV still uses our DNS address, so only ReTV works. Set DNS back to automatic:",
+        dnsRevertSteps: ["Settings → General → Network → Network Status → IP Settings.", "DNS Settings: Obtain automatically.", "OK, then wait a few seconds."],
         dnsSite: "the address shown in your account on %s",
         setup: {
           devModeTitle: "Developer Mode is needed", devModeLead: "ReTV removes apps through Samsung's Developer Mode. Turn it on once:",
-          hostIpTitle: "Set the address 127.0.0.1", hostIpLead: "Host PC IP is now %s, it needs to be 127.0.0.1:",
-          hostIpLeadNone: "Host PC IP needs to be 127.0.0.1:",
+          hostIpTitle: "Set the address 127.0.0.1",
+          hostIpLeadNone: "To remove apps right here, without a computer, Host PC IP needs 127.0.0.1 (ReTV Bridge on a computer then needs the computer's address there instead):",
+          bridgeTitle: "Remove apps in ReTV Bridge",
+          bridgeLead: "Host PC IP holds %s, a computer's address: that is how ReTV Bridge works with this TV. Remove unneeded apps in ReTV Bridge on that computer.",
+          loopLead: "Want to remove apps right here, without a computer? Enter 127.0.0.1 in Host PC IP. ReTV Bridge then cannot reach the TV until you enter the computer's address there again:",
           restartTitle: "Restart the TV", restartLead: "The address is right, the TV only needs a restart:",
           tvApiTitle: "The TV does not answer", tvApiLead: "ReTV could not read the TV's state. Usually a restart helps:",
           s1: "Open Apps on the Samsung home screen.", s2: "Press 1 2 3 4 5 on the remote.", s3: "Turn Developer Mode on.",
@@ -473,11 +546,13 @@
         rename: "Переименовать", dissolve: "Расформировать папку", dissolveHint: "Приложения останутся",
         hidden: "Скрыто: %s", folderNew: "Новая папка", folderPick: "Переместить в папку", renameTitle: "Название папки",
         movedTo: "В папке «%s»: %s", outOf: "Убрано из папки: %s", unhidden: "Снова видно: %s",
-        homeHint: "Удерживайте OK на приложении: меню (папки, скрыть, переместить, док)", allBtn: "Все приложения"
+        homeHint: "Удерживайте OK на приложении: меню (папки, скрыть, переместить, док)", allBtn: "Все приложения",
+        coach: "Удерживайте OK на приложении: меню"
       },
       folder: {
         defaultName: "Папка", hint: "Удерживайте OK: меню · Назад: закрыть", hiddenTitle: "Скрытые приложения",
         hiddenHint: "OK возвращает приложение. Скрыты только с главного экрана: сами приложения остались на ТВ.",
+        blockedHint: "OK возвращает приложение. Здесь же приложения Samsung, которые дважды не открылись на этом ТВ: их скрыл ReTV.",
         hiddenTile: "Скрытые (%s)", n: ["%s приложение", "%s приложения", "%s приложений"],
         presets: { movies: "Кино и сериалы", music: "Музыка", games: "Игры", kids: "Детям", sports: "Спорт", news: "Новости",
           tv: "ТВ-каналы", services: "Сервисы", utilities: "Утилиты", favourites: "Избранное" }
@@ -521,11 +596,18 @@
         dnsNotLinked: "Не удалось привязать сеть: блокировка работает только в привязанной домашней сети. Попробуйте позже.",
         dnsLead: "Впишите адрес DNS в настройках сети Samsung:",
         dnsSteps: ["Настройки → Общие → Сеть → Состояние сети → Настройки IP.", "Настройка DNS: Ввести вручную.", "Сервер DNS: %s, затем OK."],
+        dnsOneField: "У Samsung одно поле DNS, поэтому ReTV Home сам держит домашнюю сеть привязанной: при запуске и каждые 15 минут. Пока сеть не привязана (например, сразу после смены адреса у провайдера), на ТВ работает только ReTV.",
+        dnsRevertCard: "Верните DNS на автоматический", dnsRevertHow: "OK: показать как",
+        dnsRevertLead: "DNS без рекламы выключен, а на ТВ остался наш адрес DNS, поэтому работает только ReTV. Верните DNS на автоматический:",
+        dnsRevertSteps: ["Настройки → Общие → Сеть → Состояние сети → Настройки IP.", "Настройка DNS: Получать автоматически.", "OK, затем подождите несколько секунд."],
         dnsSite: "адрес из кабинета на %s",
         setup: {
           devModeTitle: "Нужен режим разработчика", devModeLead: "ReTV удаляет приложения через режим разработчика Samsung. Включите его один раз:",
-          hostIpTitle: "Укажите адрес 127.0.0.1", hostIpLead: "Сейчас в Host PC IP указано %s, а нужно 127.0.0.1:",
-          hostIpLeadNone: "В Host PC IP нужно указать 127.0.0.1:",
+          hostIpTitle: "Укажите адрес 127.0.0.1",
+          hostIpLeadNone: "Чтобы удалять прямо с ТВ, без компьютера, в Host PC IP нужен 127.0.0.1 (ReTV Bridge на компьютере тогда попросит вернуть туда адрес компьютера):",
+          bridgeTitle: "Удаляйте в ReTV Bridge",
+          bridgeLead: "В Host PC IP указан %s, адрес компьютера: так с ТВ работает ReTV Bridge. Удаляйте лишние приложения в ReTV Bridge на этом компьютере.",
+          loopLead: "Хотите удалять прямо с ТВ, без компьютера? Впишите в Host PC IP 127.0.0.1. Тогда ReTV Bridge не увидит ТВ, пока вы не вернёте туда адрес компьютера:",
           restartTitle: "Перезапустите ТВ", restartLead: "Адрес указан верно, осталось перезапустить ТВ:",
           tvApiTitle: "ТВ не отвечает", tvApiLead: "ReTV не смог прочитать состояние ТВ. Обычно помогает перезапуск:",
           s1: "Откройте Apps (Приложения) на главном экране Samsung.", s2: "Наберите на пульте 1 2 3 4 5.",
@@ -563,11 +645,13 @@
         rename: "Перейменувати", dissolve: "Розформувати папку", dissolveHint: "Застосунки залишаться",
         hidden: "Сховано: %s", folderNew: "Нова папка", folderPick: "Перемістити в папку", renameTitle: "Назва папки",
         movedTo: "У папці «%s»: %s", outOf: "Прибрано з папки: %s", unhidden: "Знову видно: %s",
-        homeHint: "Утримуйте OK на застосунку: меню (папки, сховати, перемістити, док)", allBtn: "Усі застосунки"
+        homeHint: "Утримуйте OK на застосунку: меню (папки, сховати, перемістити, док)", allBtn: "Усі застосунки",
+        coach: "Утримуйте OK на застосунку: меню"
       },
       folder: {
         defaultName: "Папка", hint: "Утримуйте OK: меню · Назад: закрити", hiddenTitle: "Сховані застосунки",
         hiddenHint: "OK повертає застосунок. Сховано лише з головного екрана: самі застосунки залишилися на ТВ.",
+        blockedHint: "OK повертає застосунок. Тут же застосунки Samsung, які двічі не відкрилися на цьому ТВ: їх сховав ReTV.",
         hiddenTile: "Сховані (%s)", n: ["%s застосунок", "%s застосунки", "%s застосунків"],
         presets: { movies: "Кіно та серіали", music: "Музика", games: "Ігри", kids: "Дітям", sports: "Спорт", news: "Новини",
           tv: "ТВ-канали", services: "Сервіси", utilities: "Утиліти", favourites: "Обране" }
@@ -611,11 +695,18 @@
         dnsNotLinked: "Не вдалося привʼязати мережу: блокування працює лише в привʼязаній домашній мережі. Спробуйте пізніше.",
         dnsLead: "Впишіть адресу DNS у налаштуваннях мережі Samsung:",
         dnsSteps: ["Налаштування → Загальні → Мережа → Стан мережі → Налаштування IP.", "Налаштування DNS: Ввести вручну.", "Сервер DNS: %s, потім OK."],
+        dnsOneField: "У Samsung одне поле DNS, тому ReTV Home сам тримає домашню мережу привʼязаною: під час запуску і кожні 15 хвилин. Поки мережу не привʼязано (наприклад, одразу після зміни адреси в провайдера), на ТВ працює лише ReTV.",
+        dnsRevertCard: "Поверніть DNS на автоматичний", dnsRevertHow: "OK: показати як",
+        dnsRevertLead: "DNS без реклами вимкнено, а на ТВ лишилася наша адреса DNS, тому працює лише ReTV. Поверніть DNS на автоматичний:",
+        dnsRevertSteps: ["Налаштування → Загальні → Мережа → Стан мережі → Налаштування IP.", "Налаштування DNS: Отримувати автоматично.", "OK, потім зачекайте кілька секунд."],
         dnsSite: "адресу з кабінету на %s",
         setup: {
           devModeTitle: "Потрібен режим розробника", devModeLead: "ReTV видаляє застосунки через режим розробника Samsung. Увімкніть його один раз:",
-          hostIpTitle: "Вкажіть адресу 127.0.0.1", hostIpLead: "Зараз у Host PC IP вказано %s, а потрібно 127.0.0.1:",
-          hostIpLeadNone: "У Host PC IP потрібно вказати 127.0.0.1:",
+          hostIpTitle: "Вкажіть адресу 127.0.0.1",
+          hostIpLeadNone: "Щоб видаляти просто з ТВ, без компʼютера, у Host PC IP потрібна 127.0.0.1 (ReTV Bridge на компʼютері тоді попросить повернути туди адресу компʼютера):",
+          bridgeTitle: "Видаляйте в ReTV Bridge",
+          bridgeLead: "У Host PC IP вказано %s, адресу компʼютера: так із ТВ працює ReTV Bridge. Видаляйте зайві застосунки в ReTV Bridge на цьому компʼютері.",
+          loopLead: "Хочете видаляти просто з ТВ, без компʼютера? Впишіть у Host PC IP 127.0.0.1. Тоді ReTV Bridge не бачитиме ТВ, доки ви не повернете туди адресу компʼютера:",
           restartTitle: "Перезапустіть ТВ", restartLead: "Адресу вказано правильно, лишилося перезапустити ТВ:",
           tvApiTitle: "ТВ не відповідає", tvApiLead: "ReTV не зміг прочитати стан ТВ. Зазвичай допомагає перезапуск:",
           s1: "Відкрийте Apps (Застосунки) на головному екрані Samsung.", s2: "Наберіть на пульті 1 2 3 4 5.",
@@ -805,11 +896,16 @@
     if (state === "NEEDS_RESTART") return "restart";
     return "tvApi";
   }
-  /** { title, lead, steps } for a setup guide; [ip]: what Host PC IP is now. */
+  /**
+   * { title, lead, alt?, steps } for a setup guide; [ip]: what Host PC IP is now. A computer's address there is how
+   * ReTV Bridge works with the TV (Bridge's step 2 asks for it), so then apps are removed in Bridge; 127.0.0.1 is
+   * offered only for removing without a computer, saying that Bridge then needs the computer's address back.
+   */
   function setupGuide(kind, lang, ip) {
     var o = opt(lang), st = o.setup;
     if (kind === "devMode") return { title: st.devModeTitle, lead: st.devModeLead, steps: [st.s1, st.s2, st.s3, st.s4, st.s5, st.s6] };
-    if (kind === "hostIp") return { title: st.hostIpTitle, lead: ip ? fmt(st.hostIpLead, ip) : st.hostIpLeadNone, steps: [st.s1, st.s2, st.s4, st.s5, st.s6] };
+    if (kind === "hostIp" && ip) return { title: st.bridgeTitle, lead: fmt(st.bridgeLead, ip), alt: st.loopLead, steps: [st.s1, st.s2, st.s4, st.s5, st.s6] };
+    if (kind === "hostIp") return { title: st.hostIpTitle, lead: st.hostIpLeadNone, steps: [st.s1, st.s2, st.s4, st.s5, st.s6] };
     if (kind === "restart") return { title: st.restartTitle, lead: st.restartLead, steps: [st.s5, st.s6] };
     return { title: st.tvApiTitle, lead: st.tvApiLead, steps: [st.s5, st.s6] };
   }
@@ -822,8 +918,9 @@
     if (plan === "free") return "pro";
     return dns && dns.on === true ? "ready" : "turnOn";
   }
-  // When to link the home network again (ReTV Home on Android: DnsReportPolicy): every 6 h, never twice in 15 min.
-  var DNS_REPORT_EVERY_MS = 6 * 3600000, DNS_REPORT_GAP_MS = 15 * 60000;
+  // When to link the home network again (ReTV Home on Android: DnsReportPolicy): every 15 min, never twice in 5 min.
+  // Often, because the resolver answers a home network only once it is linked (an unlinked one gets only retv.app).
+  var DNS_REPORT_EVERY_MS = 15 * 60000, DNS_REPORT_GAP_MS = 5 * 60000;
   /** [lastOk]: the last report the server took; [lastTried]: the last try; [force]: the page is open (still not in the gap). */
   function dnsReportDue(on, now, lastOk, lastTried, force) {
     if (!on) return false;
@@ -835,6 +932,34 @@
   function dnsLinkState(status, d) {
     if (status === 429) return "later";
     return status === 200 && d && d.on === true && typeof d.ip === "string" && d.ip ? "linked" : "notLinked";
+  }
+  /**
+   * The resolver's address, only for a TV that never had an answer from the server (deploy/dns: DNS_SERVER_IPS). The
+   * `servers` of the last `POST /v1/tv/dns` answer are kept (retv.dnsServers, also after signing out) and win.
+   */
+  var DNS_OURS = ["49.12.80.126"];
+  /** The resolver's addresses from a `POST /v1/tv/dns` answer's `servers`, cleaned; [] when there are none. */
+  function dnsServersOf(v) {
+    if (!Array.isArray(v)) return [];
+    var out = [];
+    for (var i = 0; i < v.length && out.length < 8; i++) {
+      var s = typeof v[i] === "string" ? v[i].trim() : "";
+      if (/^[0-9a-fA-F.:]{2,45}$/.test(s) && out.indexOf(s) < 0) out.push(s);
+    }
+    return out;
+  }
+  /** Our resolver's addresses: the server's list when known, else DNS_OURS. */
+  function dnsOurs(servers) { var s = dnsServersOf(servers); return s.length ? s : DNS_OURS; }
+  /**
+   * True when blocking is not on for this TV ([view] from dnsView is not "ready": signed out or revoked, no Pro or
+   * Pro ended, DNS off in the cabinet) but the TV's DNS ([tvDns]: what webapis.network.getDns says) is still our
+   * resolver: then only ReTV works, and the person must set DNS back to automatic. [servers]: see dnsOurs.
+   */
+  function dnsRevert(view, tvDns, servers) {
+    if (view === "ready" || typeof tvDns !== "string" || !tvDns) return false;
+    var ours = dnsOurs(servers), d = tvDns.trim();
+    for (var i = 0; i < ours.length; i++) if (ours[i] === d) return true;
+    return false;
   }
   /** The IPv4 address to type on the TV (Samsung's manual DNS takes IPv4), from a list of resolver addresses. */
   function dnsServer(servers) {
@@ -856,12 +981,15 @@
     codeText: codeText, pollOutcome: pollOutcome, isDeviceKey: isDeviceKey, hex: hex, dayText: dayText,
     plural: plural, usesText: usesText, appsText: appsText, keepApp: keepApp, preTick: preTick, cleanupRows: cleanupRows,
     adsState: adsState, adsText: adsText, setupKind: setupKind, setupGuide: setupGuide, dnsView: dnsView, dnsServer: dnsServer,
+    DNS_OURS: DNS_OURS, dnsRevert: dnsRevert, DNS_REPORT_EVERY_MS: DNS_REPORT_EVERY_MS,
     CONFIRM_CALM_MS: CONFIRM_CALM_MS, okAllowed: okAllowed, dnsReportDue: dnsReportDue, dnsLinkState: dnsLinkState,
     bridgeRequest: bridgeRequest, serverRequest: serverRequest, REQUEST_POLL_MS: REQUEST_POLL_MS, REQUEST_POLL_FOR_MS: REQUEST_POLL_FOR_MS,
     privacyReport: privacyReport, SETTINGS_ID: SETTINGS_ID, overlayApp: overlayApp,
     FOLDER_PRESETS: FOLDER_PRESETS, PRESET_PREFIX: PRESET_PREFIX, isFolderId: isFolderId, folderList: folderList,
-    hiddenList: hiddenList, folderLabel: folderLabel, layoutItems: layoutItems, hiddenApps: hiddenApps, dockItems: dockItems,
+    hiddenList: hiddenList, folderLabel: folderLabel, layoutItems: layoutItems, hiddenApps: hiddenApps,
     newFolder: newFolder, addToFolder: addToFolder, removeFromFolder: removeFromFolder, dissolveFolder: dissolveFolder,
-    renameFolder: renameFolder, hideApp: hideApp, unhideApp: unhideApp, HINT_USES: HINT_USES
+    renameFolder: renameFolder, hideApp: hideApp, unhideApp: unhideApp, HINT_USES: HINT_USES, COACH_MS: COACH_MS,
+    launchBook: launchBook, bookFail: bookFail, bookOk: bookOk, bookForgive: bookForgive, blockedIds: blockedIds,
+    NO_LAUNCH_FAILS: NO_LAUNCH_FAILS, dnsOurs: dnsOurs, dnsServersOf: dnsServersOf
   };
 })(typeof window !== "undefined" ? window : this);

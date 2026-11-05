@@ -56,6 +56,9 @@ fn bundle_skips_dev_and_service_sources() {
     for ok in [
         "config.xml",
         "main.js",
+        "logic.js",
+        "folders.js",
+        "dns.js",
         "icon.png",
         "service/dist/index.js",
         "service/dist/client.js",
